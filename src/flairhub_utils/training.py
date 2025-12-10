@@ -194,7 +194,7 @@ def train_epoch(
 
     pbar = tqdm(dataloader, desc=f"Epoch {epoch + 1} [Train]")
 
-    for batch_idx, batch in enumerate(pbar):
+    for _, batch in enumerate(pbar):
         images = batch["image"].to(device)  # (B, 3, H, W)
         masks = batch["mask"].to(device)  # (B, H, W)
 
@@ -216,7 +216,6 @@ def train_epoch(
                 mode="bilinear",
                 align_corners=False,
             )
-
         loss = criterion(logits, masks)
 
         optimizer.zero_grad()

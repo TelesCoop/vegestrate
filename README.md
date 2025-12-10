@@ -1,6 +1,6 @@
 # Inventaire stratifié du végétal
 
-Vous trouverez dans ce repos un wrapper pour Flair-Hub pour faire de l'inférence directement et des fonctions pour faire du fine-tunning. 
+Vous trouverez dans ce repos un wrapper pour [FLAIR-HUB](https://github.com/IGNF/FLAIR-HUB) pour faire de l'inférence directement et des fonctions pour faire du fine-tunning. Les poids de FLAIR-HUB sont sur [HuggingFace](https://huggingface.co/IGNF/FLAIR-HUB_LC-A_RGB_swinlarge-upernet).
 
 ## Origine des données
 
@@ -17,7 +17,7 @@ Les données d'entrée proviennent de data.grandlyon :
 Il y a aussi des scripts pour faire tourner sur les ortho 2023 de l'IGN et le le dernier LIDAR disponible qui est 2021 (`src/data_preparation/prepare_training_data_IGN.py`)
 ## Méthode
 
-Nous utilisons d'un côté la classification des nuages de points LIDAR  (`src/data_preparation/prepare_training_data_grandlyon.py`) et par ailleurs la classification des orthophotos à l'aide de FLAIR-HUB(https://github.com/IGNF/FLAIR-HUB) de l'IGN (`src/inference/inference_flair_context.py`) puis les 2 classifications sont fusionnées (`src/postprocessing/merge_classifications.py`)
+Nous utilisons d'un côté la classification des nuages de points LIDAR  (`src/data_preparation/prepare_training_data_grandlyon.py`) et par ailleurs la classification des orthophotos à l'aide de [FLAIR-HUB](https://github.com/IGNF/FLAIR-HUB) de l'IGN (`src/inference/inference_flair_context.py`) puis les 2 classifications sont fusionnées (`src/postprocessing/merge_classifications.py`)
 
 ### Classification des nuages de points LIDAR
 > `src/data_preparation/prepare_training_data_grandlyon.py`

@@ -87,14 +87,44 @@ def merge_classifications(las_path, flair_path, output_path):
 
 def main():
     """Process all matching LIDAR and FLAIR rasters."""
-    las_dir = Path("data/test")
-    flair_dir = Path("predictions_lyon_08/test")
-    output_dir = Path("merged_classifications_lyon_08/test")
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Merge LIDAR and FLAIR classification rasters"
+    )
+    parser.add_argument(
+        "--las-dir",
+        type=str,
+        default="data/test",
+        help="Directory with LIDAR classification maps (default: data/test)",
+    )
+    parser.add_argument(
+        "--flair-dir",
+        type=str,
+        default="predictions_lyon_08/test",
+        help="Directory with FLAIR predictions (default: predictions_lyon_08/test)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="merged_classifications_lyon_08/test",
+        help="Output directory for merged classifications (default: merged_classifications_lyon_08/test)",
+    )
+
+    args = parser.parse_args()
+
+    las_dir = Path(args.las_dir)
+    flair_dir = Path(args.flair_dir)
+    output_dir = Path(args.output_dir)
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 70)
     print("Merging LIDAR and FLAIR Classifications")
+    print("=" * 70)
+    print(f"LIDAR dir: {las_dir}")
+    print(f"FLAIR dir: {flair_dir}")
+    print(f"Output dir: {output_dir}")
     print("=" * 70)
 
     las_files = sorted(las_dir.glob("classification_map_*.tif"))

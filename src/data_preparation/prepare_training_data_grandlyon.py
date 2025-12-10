@@ -160,7 +160,7 @@ def process_tile_wrapper(resolution):
     """
 
     def process_tile(entry, output_dir):
-        """Process a single tile (download orthophoto).
+        """Process a single tile (download LiDAR, create classification map, download orthophoto).
 
         Args:
             entry: Manifest entry with 'url' and 'tile_id'
@@ -174,6 +174,8 @@ def process_tile_wrapper(resolution):
 
         try:
             tile_name = extract_tile_name(url)
+
+            download_and_process_lidar(url, output_dir, resolution)
             download_orthophoto(tile_name, output_dir, resolution)
 
             return {"tile_id": tile_id, "status": "success"}
@@ -213,7 +215,6 @@ def main():
 
     start_time = time.time()
 
-    # Load manifest
     manifest_path = Path(args.manifest)
     if not manifest_path.exists():
         print(f"✗ Error: Manifest not found: {manifest_path}")
