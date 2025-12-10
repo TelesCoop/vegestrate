@@ -1,0 +1,120 @@
+{
+  "train": [
+    {
+      "tile_id": "0836_6526",
+      "orthophoto": "train/orthophoto_0836_6526.tif",
+      "classification_map": "train/classification_map_0836_6526.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0836_6526_PTS_LAMB93_IGN69.copc.laz"
+    }
+  ],
+  "test": [
+    {
+      "tile_id": "0848_6520",
+      "orthophoto": "test/orthophoto_0848_6520.tif",
+      "classification_map": "test/classification_map_0848_6520.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0848_6520_PTS_LAMB93_IGN69.copc.laz"
+    },
+    {
+      "tile_id": "0847_6520",
+      "orthophoto": "test/orthophoto_0847_6520.tif",
+      "classification_map": "test/classification_map_0847_6520.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0847_6520_PTS_LAMB93_IGN69.copc.laz"
+    },
+    {
+      "tile_id": "0846_6520",
+      "orthophoto": "test/orthophoto_0846_6520.tif",
+      "classification_map": "test/classification_map_0846_6520.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0846_6520_PTS_LAMB93_IGN69.copc.laz"
+    },
+    {
+      "tile_id": "0845_6520",
+      "orthophoto": "test/orthophoto_0845_6520.tif",
+      "classification_map": "test/classification_map_0845_6520.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0845_6520_PTS_LAMB93_IGN69.copc.laz"
+    },
+    {
+      "tile_id": "0844_6520",
+      "orthophoto": "test/orthophoto_0844_6520.tif",
+      "classification_map": "test/classification_map_0844_6520.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0844_6520_PTS_LAMB93_IGN69.copc.laz"
+    },
+    {
+      "tile_id": "0844_6521",
+      "orthophoto": "test/orthophoto_0844_6521.tif",
+      "classification_map": "test/classification_map_0844_6521.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0844_6521_PTS_LAMB93_IGN69.copc.laz"
+    },
+    {
+      "tile_id": "0844_6522",
+      "orthophoto": "test/orthophoto_0844_6522.tif",
+      "classification_map": "test/classification_map_0844_6522.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0844_6522_PTS_LAMB93_IGN69.copc.laz"
+    },
+    {
+      "tile_id": "0845_6522",
+      "orthophoto": "test/orthophoto_0845_6522.tif",
+      "classification_map": "test/classification_map_0845_6522.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0845_6522_PTS_LAMB93_IGN69.copc.laz"
+    },
+    {
+      "tile_id": "0844_6523",
+      "orthophoto": "test/orthophoto_0844_6523.tif",
+      "classification_map": "test/classification_map_0844_6523.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0844_6523_PTS_LAMB93_IGN69.copc.laz"
+    },
+    {
+      "tile_id": "0845_6523",
+      "orthophoto": "test/orthophoto_0845_6523.tif",
+      "classification_map": "test/classification_map_0845_6523.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0845_6523_PTS_LAMB93_IGN69.copc.laz"
+    },
+    {
+      "tile_id": "0846_6523",
+      "orthophoto": "test/orthophoto_0846_6523.tif",
+      "classification_map": "test/classification_map_0846_6523.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0846_6523_PTS_LAMB93_IGN69.copc.laz"
+    },
+    {
+      "tile_id": "0846_6522",
+      "orthophoto": "test/orthophoto_0846_6522.tif",
+      "classification_map": "test/classification_map_0846_6522.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0846_6522_PTS_LAMB93_IGN69.copc.laz"
+    },
+    {
+      "tile_id": "0847_6522",
+      "orthophoto": "test/orthophoto_0847_6522.tif",
+      "classification_map": "test/classification_map_0847_6522.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0847_6522_PTS_LAMB93_IGN69.copc.laz"
+    },
+    {
+      "tile_id": "0846_6521",
+      "orthophoto": "test/orthophoto_0846_6521.tif",
+      "classification_map": "test/classification_map_0846_6521.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0846_6521_PTS_LAMB93_IGN69.copc.laz"
+    },
+    {
+      "tile_id": "0845_6521",
+      "orthophoto": "test/orthophoto_0845_6521.tif",
+      "classification_map": "test/classification_map_0845_6521.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0845_6521_PTS_LAMB93_IGN69.copc.laz"
+    },
+    {
+      "tile_id": "0847_6521",
+      "orthophoto": "test/orthophoto_0847_6521.tif",
+      "classification_map": "test/classification_map_0847_6521.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0847_6521_PTS_LAMB93_IGN69.copc.laz"
+    },
+    {
+      "tile_id": "0848_6521",
+      "orthophoto": "test/orthophoto_0848_6521.tif",
+      "classification_map": "test/classification_map_0848_6521.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0848_6521_PTS_LAMB93_IGN69.copc.laz"
+    },
+    {
+      "tile_id": "0847_6523",
+      "orthophoto": "test/orthophoto_0847_6523.tif",
+      "classification_map": "test/classification_map_0847_6523.tif",
+      "url": "https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/NUALHD_1-0__LAZ_LAMB93_OL_2025-02-20/LHD_FXX_0847_6523_PTS_LAMB93_IGN69.copc.laz"
+    }
+  ]
+}

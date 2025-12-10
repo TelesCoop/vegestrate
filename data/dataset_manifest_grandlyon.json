@@ -1,0 +1,780 @@
+{
+  "train": [
+    {
+      "tile_id": "18430_51735",
+      "orthophoto": "test/orthophoto_18430_51735.tif",
+      "classification_map": "test/18430_51735_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18430_51735.laz"
+    }
+  ],
+  "test": [
+    {
+      "tile_id": "18430_51735",
+      "orthophoto": "test/orthophoto_18430_51735.tif",
+      "classification_map": "test/18430_51735_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18430_51735.laz"
+    },
+    {
+      "tile_id": "18430_51740",
+      "orthophoto": "test/orthophoto_18430_51740.tif",
+      "classification_map": "test/18430_51740_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18430_51740.laz"
+    },
+    {
+      "tile_id": "18430_51745",
+      "orthophoto": "test/orthophoto_18430_51745.tif",
+      "classification_map": "test/18430_51745_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18430_51745.laz"
+    },
+    {
+      "tile_id": "18430_51750",
+      "orthophoto": "test/orthophoto_18430_51750.tif",
+      "classification_map": "test/18430_51750_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18430_51750.laz"
+    },
+    {
+      "tile_id": "18430_51755",
+      "orthophoto": "test/orthophoto_18430_51755.tif",
+      "classification_map": "test/18430_51755_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18430_51755.laz"
+    },
+    {
+      "tile_id": "18430_51760",
+      "orthophoto": "test/orthophoto_18430_51760.tif",
+      "classification_map": "test/18430_51760_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18430_51760.laz"
+    },
+    {
+      "tile_id": "18430_51765",
+      "orthophoto": "test/orthophoto_18430_51765.tif",
+      "classification_map": "test/18430_51765_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18430_51765.laz"
+    },
+    {
+      "tile_id": "18430_51770",
+      "orthophoto": "test/orthophoto_18430_51770.tif",
+      "classification_map": "test/18430_51770_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18430_51770.laz"
+    },
+    {
+      "tile_id": "18435_51735",
+      "orthophoto": "test/orthophoto_18435_51735.tif",
+      "classification_map": "test/18435_51735_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18435_51735.laz"
+    },
+    {
+      "tile_id": "18435_51740",
+      "orthophoto": "test/orthophoto_18435_51740.tif",
+      "classification_map": "test/18435_51740_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18435_51740.laz"
+    },
+    {
+      "tile_id": "18435_51745",
+      "orthophoto": "test/orthophoto_18435_51745.tif",
+      "classification_map": "test/18435_51745_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18435_51745.laz"
+    },
+    {
+      "tile_id": "18435_51750",
+      "orthophoto": "test/orthophoto_18435_51750.tif",
+      "classification_map": "test/18435_51750_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18435_51750.laz"
+    },
+    {
+      "tile_id": "18435_51755",
+      "orthophoto": "test/orthophoto_18435_51755.tif",
+      "classification_map": "test/18435_51755_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18435_51755.laz"
+    },
+    {
+      "tile_id": "18435_51760",
+      "orthophoto": "test/orthophoto_18435_51760.tif",
+      "classification_map": "test/18435_51760_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18435_51760.laz"
+    },
+    {
+      "tile_id": "18435_51765",
+      "orthophoto": "test/orthophoto_18435_51765.tif",
+      "classification_map": "test/18435_51765_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18435_51765.laz"
+    },
+    {
+      "tile_id": "18435_51770",
+      "orthophoto": "test/orthophoto_18435_51770.tif",
+      "classification_map": "test/18435_51770_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18435_51770.laz"
+    },
+    {
+      "tile_id": "18440_51735",
+      "orthophoto": "test/orthophoto_18440_51735.tif",
+      "classification_map": "test/18440_51735_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18440_51735.laz"
+    },
+    {
+      "tile_id": "18440_51740",
+      "orthophoto": "test/orthophoto_18440_51740.tif",
+      "classification_map": "test/18440_51740_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18440_51740.laz"
+    },
+    {
+      "tile_id": "18440_51745",
+      "orthophoto": "test/orthophoto_18440_51745.tif",
+      "classification_map": "test/18440_51745_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18440_51745.laz"
+    },
+    {
+      "tile_id": "18440_51750",
+      "orthophoto": "test/orthophoto_18440_51750.tif",
+      "classification_map": "test/18440_51750_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18440_51750.laz"
+    },
+    {
+      "tile_id": "18440_51755",
+      "orthophoto": "test/orthophoto_18440_51755.tif",
+      "classification_map": "test/18440_51755_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18440_51755.laz"
+    },
+    {
+      "tile_id": "18440_51760",
+      "orthophoto": "test/orthophoto_18440_51760.tif",
+      "classification_map": "test/18440_51760_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18440_51760.laz"
+    },
+    {
+      "tile_id": "18440_51765",
+      "orthophoto": "test/orthophoto_18440_51765.tif",
+      "classification_map": "test/18440_51765_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18440_51765.laz"
+    },
+    {
+      "tile_id": "18440_51770",
+      "orthophoto": "test/orthophoto_18440_51770.tif",
+      "classification_map": "test/18440_51770_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18440_51770.laz"
+    },
+    {
+      "tile_id": "18445_51735",
+      "orthophoto": "test/orthophoto_18445_51735.tif",
+      "classification_map": "test/18445_51735_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18445_51735.laz"
+    },
+    {
+      "tile_id": "18445_51740",
+      "orthophoto": "test/orthophoto_18445_51740.tif",
+      "classification_map": "test/18445_51740_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18445_51740.laz"
+    },
+    {
+      "tile_id": "18445_51745",
+      "orthophoto": "test/orthophoto_18445_51745.tif",
+      "classification_map": "test/18445_51745_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18445_51745.laz"
+    },
+    {
+      "tile_id": "18445_51750",
+      "orthophoto": "test/orthophoto_18445_51750.tif",
+      "classification_map": "test/18445_51750_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18445_51750.laz"
+    },
+    {
+      "tile_id": "18445_51755",
+      "orthophoto": "test/orthophoto_18445_51755.tif",
+      "classification_map": "test/18445_51755_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18445_51755.laz"
+    },
+    {
+      "tile_id": "18445_51760",
+      "orthophoto": "test/orthophoto_18445_51760.tif",
+      "classification_map": "test/18445_51760_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18445_51760.laz"
+    },
+    {
+      "tile_id": "18445_51765",
+      "orthophoto": "test/orthophoto_18445_51765.tif",
+      "classification_map": "test/18445_51765_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18445_51765.laz"
+    },
+    {
+      "tile_id": "18445_51770",
+      "orthophoto": "test/orthophoto_18445_51770.tif",
+      "classification_map": "test/18445_51770_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18445_51770.laz"
+    },
+    {
+      "tile_id": "18450_51735",
+      "orthophoto": "test/orthophoto_18450_51735.tif",
+      "classification_map": "test/18450_51735_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18450_51735.laz"
+    },
+    {
+      "tile_id": "18450_51740",
+      "orthophoto": "test/orthophoto_18450_51740.tif",
+      "classification_map": "test/18450_51740_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18450_51740.laz"
+    },
+    {
+      "tile_id": "18450_51745",
+      "orthophoto": "test/orthophoto_18450_51745.tif",
+      "classification_map": "test/18450_51745_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18450_51745.laz"
+    },
+    {
+      "tile_id": "18450_51750",
+      "orthophoto": "test/orthophoto_18450_51750.tif",
+      "classification_map": "test/18450_51750_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18450_51750.laz"
+    },
+    {
+      "tile_id": "18450_51755",
+      "orthophoto": "test/orthophoto_18450_51755.tif",
+      "classification_map": "test/18450_51755_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18450_51755.laz"
+    },
+    {
+      "tile_id": "18450_51760",
+      "orthophoto": "test/orthophoto_18450_51760.tif",
+      "classification_map": "test/18450_51760_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18450_51760.laz"
+    },
+    {
+      "tile_id": "18450_51765",
+      "orthophoto": "test/orthophoto_18450_51765.tif",
+      "classification_map": "test/18450_51765_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18450_51765.laz"
+    },
+    {
+      "tile_id": "18450_51770",
+      "orthophoto": "test/orthophoto_18450_51770.tif",
+      "classification_map": "test/18450_51770_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18450_51770.laz"
+    },
+    {
+      "tile_id": "18455_51735",
+      "orthophoto": "test/orthophoto_18455_51735.tif",
+      "classification_map": "test/18455_51735_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18455_51735.laz"
+    },
+    {
+      "tile_id": "18455_51740",
+      "orthophoto": "test/orthophoto_18455_51740.tif",
+      "classification_map": "test/18455_51740_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18455_51740.laz"
+    },
+    {
+      "tile_id": "18455_51745",
+      "orthophoto": "test/orthophoto_18455_51745.tif",
+      "classification_map": "test/18455_51745_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18455_51745.laz"
+    },
+    {
+      "tile_id": "18455_51750",
+      "orthophoto": "test/orthophoto_18455_51750.tif",
+      "classification_map": "test/18455_51750_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18455_51750.laz"
+    },
+    {
+      "tile_id": "18455_51755",
+      "orthophoto": "test/orthophoto_18455_51755.tif",
+      "classification_map": "test/18455_51755_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18455_51755.laz"
+    },
+    {
+      "tile_id": "18455_51760",
+      "orthophoto": "test/orthophoto_18455_51760.tif",
+      "classification_map": "test/18455_51760_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18455_51760.laz"
+    },
+    {
+      "tile_id": "18455_51765",
+      "orthophoto": "test/orthophoto_18455_51765.tif",
+      "classification_map": "test/18455_51765_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18455_51765.laz"
+    },
+    {
+      "tile_id": "18455_51770",
+      "orthophoto": "test/orthophoto_18455_51770.tif",
+      "classification_map": "test/18455_51770_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18455_51770.laz"
+    },
+    {
+      "tile_id": "18460_51735",
+      "orthophoto": "test/orthophoto_18460_51735.tif",
+      "classification_map": "test/18460_51735_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18460_51735.laz"
+    },
+    {
+      "tile_id": "18460_51740",
+      "orthophoto": "test/orthophoto_18460_51740.tif",
+      "classification_map": "test/18460_51740_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18460_51740.laz"
+    },
+    {
+      "tile_id": "18460_51745",
+      "orthophoto": "test/orthophoto_18460_51745.tif",
+      "classification_map": "test/18460_51745_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18460_51745.laz"
+    },
+    {
+      "tile_id": "18460_51750",
+      "orthophoto": "test/orthophoto_18460_51750.tif",
+      "classification_map": "test/18460_51750_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18460_51750.laz"
+    },
+    {
+      "tile_id": "18460_51755",
+      "orthophoto": "test/orthophoto_18460_51755.tif",
+      "classification_map": "test/18460_51755_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18460_51755.laz"
+    },
+    {
+      "tile_id": "18460_51760",
+      "orthophoto": "test/orthophoto_18460_51760.tif",
+      "classification_map": "test/18460_51760_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18460_51760.laz"
+    },
+    {
+      "tile_id": "18460_51765",
+      "orthophoto": "test/orthophoto_18460_51765.tif",
+      "classification_map": "test/18460_51765_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18460_51765.laz"
+    },
+    {
+      "tile_id": "18460_51770",
+      "orthophoto": "test/orthophoto_18460_51770.tif",
+      "classification_map": "test/18460_51770_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18460_51770.laz"
+    },
+    {
+      "tile_id": "18465_51735",
+      "orthophoto": "test/orthophoto_18465_51735.tif",
+      "classification_map": "test/18465_51735_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18465_51735.laz"
+    },
+    {
+      "tile_id": "18465_51740",
+      "orthophoto": "test/orthophoto_18465_51740.tif",
+      "classification_map": "test/18465_51740_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18465_51740.laz"
+    },
+    {
+      "tile_id": "18465_51745",
+      "orthophoto": "test/orthophoto_18465_51745.tif",
+      "classification_map": "test/18465_51745_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18465_51745.laz"
+    },
+    {
+      "tile_id": "18465_51750",
+      "orthophoto": "test/orthophoto_18465_51750.tif",
+      "classification_map": "test/18465_51750_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18465_51750.laz"
+    },
+    {
+      "tile_id": "18465_51755",
+      "orthophoto": "test/orthophoto_18465_51755.tif",
+      "classification_map": "test/18465_51755_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18465_51755.laz"
+    },
+    {
+      "tile_id": "18465_51760",
+      "orthophoto": "test/orthophoto_18465_51760.tif",
+      "classification_map": "test/18465_51760_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18465_51760.laz"
+    },
+    {
+      "tile_id": "18465_51765",
+      "orthophoto": "test/orthophoto_18465_51765.tif",
+      "classification_map": "test/18465_51765_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18465_51765.laz"
+    },
+    {
+      "tile_id": "18465_51770",
+      "orthophoto": "test/orthophoto_18465_51770.tif",
+      "classification_map": "test/18465_51770_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18465_51770.laz"
+    },
+    {
+      "tile_id": "18470_51735",
+      "orthophoto": "test/orthophoto_18470_51735.tif",
+      "classification_map": "test/18470_51735_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18470_51735.laz"
+    },
+    {
+      "tile_id": "18470_51740",
+      "orthophoto": "test/orthophoto_18470_51740.tif",
+      "classification_map": "test/18470_51740_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18470_51740.laz"
+    },
+    {
+      "tile_id": "18470_51745",
+      "orthophoto": "test/orthophoto_18470_51745.tif",
+      "classification_map": "test/18470_51745_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18470_51745.laz"
+    },
+    {
+      "tile_id": "18470_51750",
+      "orthophoto": "test/orthophoto_18470_51750.tif",
+      "classification_map": "test/18470_51750_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18470_51750.laz"
+    },
+    {
+      "tile_id": "18470_51755",
+      "orthophoto": "test/orthophoto_18470_51755.tif",
+      "classification_map": "test/18470_51755_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18470_51755.laz"
+    },
+    {
+      "tile_id": "18470_51760",
+      "orthophoto": "test/orthophoto_18470_51760.tif",
+      "classification_map": "test/18470_51760_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18470_51760.laz"
+    },
+    {
+      "tile_id": "18470_51765",
+      "orthophoto": "test/orthophoto_18470_51765.tif",
+      "classification_map": "test/18470_51765_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18470_51765.laz"
+    },
+    {
+      "tile_id": "18470_51770",
+      "orthophoto": "test/orthophoto_18470_51770.tif",
+      "classification_map": "test/18470_51770_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18470_51770.laz"
+    },
+    {
+      "tile_id": "18475_51735",
+      "orthophoto": "test/orthophoto_18475_51735.tif",
+      "classification_map": "test/18475_51735_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18475_51735.laz"
+    },
+    {
+      "tile_id": "18475_51740",
+      "orthophoto": "test/orthophoto_18475_51740.tif",
+      "classification_map": "test/18475_51740_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18475_51740.laz"
+    },
+    {
+      "tile_id": "18475_51745",
+      "orthophoto": "test/orthophoto_18475_51745.tif",
+      "classification_map": "test/18475_51745_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18475_51745.laz"
+    },
+    {
+      "tile_id": "18475_51750",
+      "orthophoto": "test/orthophoto_18475_51750.tif",
+      "classification_map": "test/18475_51750_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18475_51750.laz"
+    },
+    {
+      "tile_id": "18475_51755",
+      "orthophoto": "test/orthophoto_18475_51755.tif",
+      "classification_map": "test/18475_51755_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18475_51755.laz"
+    },
+    {
+      "tile_id": "18475_51760",
+      "orthophoto": "test/orthophoto_18475_51760.tif",
+      "classification_map": "test/18475_51760_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18475_51760.laz"
+    },
+    {
+      "tile_id": "18475_51765",
+      "orthophoto": "test/orthophoto_18475_51765.tif",
+      "classification_map": "test/18475_51765_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18475_51765.laz"
+    },
+    {
+      "tile_id": "18475_51770",
+      "orthophoto": "test/orthophoto_18475_51770.tif",
+      "classification_map": "test/18475_51770_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18475_51770.laz"
+    },
+    {
+      "tile_id": "18480_51735",
+      "orthophoto": "test/orthophoto_18480_51735.tif",
+      "classification_map": "test/18480_51735_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18480_51735.laz"
+    },
+    {
+      "tile_id": "18480_51740",
+      "orthophoto": "test/orthophoto_18480_51740.tif",
+      "classification_map": "test/18480_51740_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18480_51740.laz"
+    },
+    {
+      "tile_id": "18480_51745",
+      "orthophoto": "test/orthophoto_18480_51745.tif",
+      "classification_map": "test/18480_51745_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18480_51745.laz"
+    },
+    {
+      "tile_id": "18480_51750",
+      "orthophoto": "test/orthophoto_18480_51750.tif",
+      "classification_map": "test/18480_51750_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18480_51750.laz"
+    },
+    {
+      "tile_id": "18480_51755",
+      "orthophoto": "test/orthophoto_18480_51755.tif",
+      "classification_map": "test/18480_51755_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18480_51755.laz"
+    },
+    {
+      "tile_id": "18480_51760",
+      "orthophoto": "test/orthophoto_18480_51760.tif",
+      "classification_map": "test/18480_51760_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18480_51760.laz"
+    },
+    {
+      "tile_id": "18480_51765",
+      "orthophoto": "test/orthophoto_18480_51765.tif",
+      "classification_map": "test/18480_51765_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18480_51765.laz"
+    },
+    {
+      "tile_id": "18480_51770",
+      "orthophoto": "test/orthophoto_18480_51770.tif",
+      "classification_map": "test/18480_51770_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18480_51770.laz"
+    },
+    {
+      "tile_id": "18485_51735",
+      "orthophoto": "test/orthophoto_18485_51735.tif",
+      "classification_map": "test/18485_51735_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18485_51735.laz"
+    },
+    {
+      "tile_id": "18485_51740",
+      "orthophoto": "test/orthophoto_18485_51740.tif",
+      "classification_map": "test/18485_51740_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18485_51740.laz"
+    },
+    {
+      "tile_id": "18485_51745",
+      "orthophoto": "test/orthophoto_18485_51745.tif",
+      "classification_map": "test/18485_51745_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18485_51745.laz"
+    },
+    {
+      "tile_id": "18485_51750",
+      "orthophoto": "test/orthophoto_18485_51750.tif",
+      "classification_map": "test/18485_51750_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18485_51750.laz"
+    },
+    {
+      "tile_id": "18485_51755",
+      "orthophoto": "test/orthophoto_18485_51755.tif",
+      "classification_map": "test/18485_51755_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18485_51755.laz"
+    },
+    {
+      "tile_id": "18485_51760",
+      "orthophoto": "test/orthophoto_18485_51760.tif",
+      "classification_map": "test/18485_51760_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18485_51760.laz"
+    },
+    {
+      "tile_id": "18485_51765",
+      "orthophoto": "test/orthophoto_18485_51765.tif",
+      "classification_map": "test/18485_51765_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18485_51765.laz"
+    },
+    {
+      "tile_id": "18485_51770",
+      "orthophoto": "test/orthophoto_18485_51770.tif",
+      "classification_map": "test/18485_51770_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18485_51770.laz"
+    },
+    {
+      "tile_id": "18490_51735",
+      "orthophoto": "test/orthophoto_18490_51735.tif",
+      "classification_map": "test/18490_51735_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18490_51735.laz"
+    },
+    {
+      "tile_id": "18490_51740",
+      "orthophoto": "test/orthophoto_18490_51740.tif",
+      "classification_map": "test/18490_51740_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18490_51740.laz"
+    },
+    {
+      "tile_id": "18490_51745",
+      "orthophoto": "test/orthophoto_18490_51745.tif",
+      "classification_map": "test/18490_51745_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18490_51745.laz"
+    },
+    {
+      "tile_id": "18490_51750",
+      "orthophoto": "test/orthophoto_18490_51750.tif",
+      "classification_map": "test/18490_51750_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18490_51750.laz"
+    },
+    {
+      "tile_id": "18490_51755",
+      "orthophoto": "test/orthophoto_18490_51755.tif",
+      "classification_map": "test/18490_51755_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18490_51755.laz"
+    },
+    {
+      "tile_id": "18490_51760",
+      "orthophoto": "test/orthophoto_18490_51760.tif",
+      "classification_map": "test/18490_51760_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18490_51760.laz"
+    },
+    {
+      "tile_id": "18490_51765",
+      "orthophoto": "test/orthophoto_18490_51765.tif",
+      "classification_map": "test/18490_51765_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18490_51765.laz"
+    },
+    {
+      "tile_id": "18490_51770",
+      "orthophoto": "test/orthophoto_18490_51770.tif",
+      "classification_map": "test/18490_51770_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18490_51770.laz"
+    },
+    {
+      "tile_id": "18495_51735",
+      "orthophoto": "test/orthophoto_18495_51735.tif",
+      "classification_map": "test/18495_51735_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18495_51735.laz"
+    },
+    {
+      "tile_id": "18495_51740",
+      "orthophoto": "test/orthophoto_18495_51740.tif",
+      "classification_map": "test/18495_51740_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18495_51740.laz"
+    },
+    {
+      "tile_id": "18495_51745",
+      "orthophoto": "test/orthophoto_18495_51745.tif",
+      "classification_map": "test/18495_51745_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18495_51745.laz"
+    },
+    {
+      "tile_id": "18495_51750",
+      "orthophoto": "test/orthophoto_18495_51750.tif",
+      "classification_map": "test/18495_51750_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18495_51750.laz"
+    },
+    {
+      "tile_id": "18495_51755",
+      "orthophoto": "test/orthophoto_18495_51755.tif",
+      "classification_map": "test/18495_51755_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18495_51755.laz"
+    },
+    {
+      "tile_id": "18495_51760",
+      "orthophoto": "test/orthophoto_18495_51760.tif",
+      "classification_map": "test/18495_51760_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18495_51760.laz"
+    },
+    {
+      "tile_id": "18495_51765",
+      "orthophoto": "test/orthophoto_18495_51765.tif",
+      "classification_map": "test/18495_51765_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18495_51765.laz"
+    },
+    {
+      "tile_id": "18495_51770",
+      "orthophoto": "test/orthophoto_18495_51770.tif",
+      "classification_map": "test/18495_51770_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18495_51770.laz"
+    },
+    {
+      "tile_id": "18500_51735",
+      "orthophoto": "test/orthophoto_18500_51735.tif",
+      "classification_map": "test/18500_51735_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18500_51735.laz"
+    },
+    {
+      "tile_id": "18500_51740",
+      "orthophoto": "test/orthophoto_18500_51740.tif",
+      "classification_map": "test/18500_51740_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18500_51740.laz"
+    },
+    {
+      "tile_id": "18500_51745",
+      "orthophoto": "test/orthophoto_18500_51745.tif",
+      "classification_map": "test/18500_51745_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18500_51745.laz"
+    },
+    {
+      "tile_id": "18500_51750",
+      "orthophoto": "test/orthophoto_18500_51750.tif",
+      "classification_map": "test/18500_51750_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18500_51750.laz"
+    },
+    {
+      "tile_id": "18500_51755",
+      "orthophoto": "test/orthophoto_18500_51755.tif",
+      "classification_map": "test/18500_51755_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18500_51755.laz"
+    },
+    {
+      "tile_id": "18500_51760",
+      "orthophoto": "test/orthophoto_18500_51760.tif",
+      "classification_map": "test/18500_51760_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18500_51760.laz"
+    },
+    {
+      "tile_id": "18500_51765",
+      "orthophoto": "test/orthophoto_18500_51765.tif",
+      "classification_map": "test/18500_51765_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18500_51765.laz"
+    },
+    {
+      "tile_id": "18500_51770",
+      "orthophoto": "test/orthophoto_18500_51770.tif",
+      "classification_map": "test/18500_51770_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18500_51770.laz"
+    },
+    {
+      "tile_id": "18505_51735",
+      "orthophoto": "test/orthophoto_18505_51735.tif",
+      "classification_map": "test/18505_51735_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18505_51735.laz"
+    },
+    {
+      "tile_id": "18505_51740",
+      "orthophoto": "test/orthophoto_18505_51740.tif",
+      "classification_map": "test/18505_51740_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18505_51740.laz"
+    },
+    {
+      "tile_id": "18505_51745",
+      "orthophoto": "test/orthophoto_18505_51745.tif",
+      "classification_map": "test/18505_51745_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18505_51745.laz"
+    },
+    {
+      "tile_id": "18505_51750",
+      "orthophoto": "test/orthophoto_18505_51750.tif",
+      "classification_map": "test/18505_51750_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18505_51750.laz"
+    },
+    {
+      "tile_id": "18505_51755",
+      "orthophoto": "test/orthophoto_18505_51755.tif",
+      "classification_map": "test/18505_51755_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18505_51755.laz"
+    },
+    {
+      "tile_id": "18505_51760",
+      "orthophoto": "test/orthophoto_18505_51760.tif",
+      "classification_map": "test/18505_51760_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18505_51760.laz"
+    },
+    {
+      "tile_id": "18505_51765",
+      "orthophoto": "test/orthophoto_18505_51765.tif",
+      "classification_map": "test/18505_51765_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18505_51765.laz"
+    },
+    {
+      "tile_id": "18505_51770",
+      "orthophoto": "test/orthophoto_18505_51770.tif",
+      "classification_map": "test/18505_51770_classification_map.tif",
+      "url": "https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18505_51770.laz"
+    }
+  ]
+}
