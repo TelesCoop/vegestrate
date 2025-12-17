@@ -3,6 +3,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from osgeo import gdal, ogr
 
 
 def run_command(cmd, description):
@@ -22,6 +23,57 @@ def run_command(cmd, description):
     return True
 
 
+def vectorize_raster(raster_path, vector_path, vector_format, use_8connected=False, field_name="DN"):
+    """Vectorize a raster to polygons using GDAL Python API."""
+    print(f"\n{'=' * 70}")
+    print(f"Vectorizing: {raster_path} -> {vector_path}")
+    print(f"Format: {vector_format}, 8-connected: {use_8connected}")
+    print(f"{'=' * 70}\n")
+
+    src_ds = gdal.Open(str(raster_path))
+    if src_ds is None:
+        print(f"✗ Error: Could not open raster: {raster_path}")
+        return False
+
+    src_band = src_ds.GetRasterBand(1)
+
+    driver_name = vector_format if vector_format != "ESRI Shapefile" else "ESRI Shapefile"
+    drv = ogr.GetDriverByName(driver_name)
+    if drv is None:
+        print(f"✗ Error: Could not get driver: {driver_name}")
+        return False
+
+    if Path(vector_path).exists():
+        drv.DeleteDataSource(str(vector_path))
+
+    dst_ds = drv.CreateDataSource(str(vector_path))
+    if dst_ds is None:
+        print(f"✗ Error: Could not create vector file: {vector_path}")
+        return False
+
+    srs = None
+    if src_ds.GetProjection():
+        from osgeo import osr
+        srs = osr.SpatialReference()
+        srs.ImportFromWkt(src_ds.GetProjection())
+
+    dst_layer = dst_ds.CreateLayer("vegetation", srs=srs)
+    field_defn = ogr.FieldDefn(field_name, ogr.OFTInteger)
+    dst_layer.CreateField(field_defn)
+
+    options = []
+    if use_8connected:
+        options.append("8CONNECTED=8")
+
+    gdal.Polygonize(src_band, None, dst_layer, 0, options, callback=gdal.TermProgress)
+
+    dst_ds = None
+    src_ds = None
+
+    print(f"\n✓ Vectorization complete: {vector_path}")
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Complete GrandLyon vegetation stratification pipeline",
@@ -33,11 +85,13 @@ Pipeline phases:
   3. FLAIR context-aware inference
   4. Merge LiDAR + FLAIR classifications
   5. Final tile merge into single raster
+  6. Vectorization to shapefile/geopackage (optional)
 
 Examples:
   python pipeline_grandlyon.py --checkpoint model.safetensors
   python pipeline_grandlyon.py --skip-data-prep --checkpoint model.safetensors
   python pipeline_grandlyon.py --only-merge
+  python pipeline_grandlyon.py --checkpoint model.safetensors --vectorize
         """,
     )
 
@@ -152,6 +206,25 @@ Examples:
         "--only-merge",
         action="store_true",
         help="Only run merge phases (skip data prep and inference)",
+    )
+
+    parser.add_argument(
+        "--vectorize",
+        action="store_true",
+        help="Vectorize final raster to vector format",
+    )
+
+    parser.add_argument(
+        "--vector-format",
+        choices=["ESRI Shapefile", "GPKG", "GeoJSON"],
+        default="ESRI Shapefile",
+        help="Vector output format (default: ESRI Shapefile)",
+    )
+
+    parser.add_argument(
+        "--vector-8connected",
+        action="store_true",
+        help="Use 8-connectedness for polygonization (treats diagonal pixels as connected)",
     )
 
     args = parser.parse_args()
@@ -286,6 +359,31 @@ Examples:
         if not run_command(cmd, f"PHASE 4: Final merge for {split} split"):
             return 1
 
+    if args.vectorize:
+        for split in args.splits:
+            output_file = f"final_{args.output_name}_{split}.tif"
+
+            if not Path(output_file).exists():
+                print(f"\n✗ Warning: Final raster not found: {output_file}")
+                continue
+
+            ext_map = {
+                "ESRI Shapefile": "shp",
+                "GPKG": "gpkg",
+                "GeoJSON": "geojson"
+            }
+            ext = ext_map[args.vector_format]
+            vector_output = f"final_{args.output_name}_{split}.{ext}"
+
+            if not vectorize_raster(
+                output_file,
+                vector_output,
+                args.vector_format,
+                use_8connected=args.vector_8connected,
+                field_name="vegetation_class"
+            ):
+                print(f"\n⚠ Warning: Vectorization failed for {split} split")
+
     elapsed = time.time() - start_time
 
     print("\n" + "=" * 70)
@@ -299,6 +397,17 @@ Examples:
         output_file = f"final_{args.output_name}_{split}.tif"
         if Path(output_file).exists():
             print(f"  Final {split} raster: {output_file}")
+
+        if args.vectorize:
+            ext_map = {
+                "ESRI Shapefile": "shp",
+                "GPKG": "gpkg",
+                "GeoJSON": "geojson"
+            }
+            ext = ext_map[args.vector_format]
+            vector_output = f"final_{args.output_name}_{split}.{ext}"
+            if Path(vector_output).exists():
+                print(f"  Final {split} vector: {vector_output}")
 
     return 0
 
