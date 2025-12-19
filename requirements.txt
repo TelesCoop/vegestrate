@@ -1,7 +1,5 @@
 -e git+https://github.com/IGNF/FLAIR-HUB.git#egg=flair_hub
 
-GDAL==3.9.3
-
 geopandas>=0.10.0
 humanize>=3.0.0
 laspy[lazrs]>=2.0.0
