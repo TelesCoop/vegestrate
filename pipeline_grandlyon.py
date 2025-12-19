@@ -23,7 +23,9 @@ def run_command(cmd, description):
     return True
 
 
-def vectorize_raster(raster_path, vector_path, vector_format, use_8connected=False, field_name="DN"):
+def vectorize_raster(
+    raster_path, vector_path, vector_format, use_8connected=False, field_name="DN"
+):
     """Vectorize a raster to polygons using GDAL Python API."""
     print(f"\n{'=' * 70}")
     print(f"Vectorizing: {raster_path} -> {vector_path}")
@@ -37,7 +39,9 @@ def vectorize_raster(raster_path, vector_path, vector_format, use_8connected=Fal
 
     src_band = src_ds.GetRasterBand(1)
 
-    driver_name = vector_format if vector_format != "ESRI Shapefile" else "ESRI Shapefile"
+    driver_name = (
+        vector_format if vector_format != "ESRI Shapefile" else "ESRI Shapefile"
+    )
     drv = ogr.GetDriverByName(driver_name)
     if drv is None:
         print(f"✗ Error: Could not get driver: {driver_name}")
@@ -54,6 +58,7 @@ def vectorize_raster(raster_path, vector_path, vector_format, use_8connected=Fal
     srs = None
     if src_ds.GetProjection():
         from osgeo import osr
+
         srs = osr.SpatialReference()
         srs.ImportFromWkt(src_ds.GetProjection())
 
@@ -74,7 +79,8 @@ def vectorize_raster(raster_path, vector_path, vector_format, use_8connected=Fal
     return True
 
 
-def main():
+def parse_arguments():
+    """Parse command line arguments for the pipeline."""
     parser = argparse.ArgumentParser(
         description="Complete GrandLyon vegetation stratification pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -227,103 +233,105 @@ Examples:
         help="Use 8-connectedness for polygonization (treats diagonal pixels as connected)",
     )
 
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    start_time = time.time()
 
-    print("=" * 70)
-    print("GRANDLYON VEGETATION STRATIFICATION PIPELINE")
-    print("=" * 70)
-    print(f"Manifest: {args.manifest}")
-    print(f"Checkpoint: {args.checkpoint}")
-    print(f"Resolution: {args.resolution}m")
-    print(f"Splits: {', '.join(args.splits)}")
-    print(f"Output prefix: {args.output_name}")
+def phase0_update_manifest(args):
+    """Update manifest from CSV if requested."""
+    if not args.update_manifest:
+        return True
+    return run_command(
+        ["python", "src/data_preparation/update_manifest_grandlyon.py"],
+        "PHASE 0: Update manifest from CSV",
+    )
 
-    manifest_path = Path(args.manifest)
 
-    if args.update_manifest:
-        if not run_command(
-            ["python", "src/data_preparation/update_manifest_grandlyon.py"],
-            "PHASE 0: Update manifest from CSV",
-        ):
-            return 1
+def phase1_data_preparation(args):
+    """Prepare training data from LiDAR and orthophotos."""
+    if args.only_merge or args.skip_data_prep:
+        return True
+    return run_command(
+        [
+            "python",
+            "src/data_preparation/prepare_training_data_grandlyon.py",
+            "--manifest",
+            args.manifest,
+            "--resolution",
+            str(args.resolution),
+            "--workers",
+            str(args.workers),
+        ],
+        "PHASE 1: Data preparation (LiDAR + orthophotos)",
+    )
 
-    if not manifest_path.exists():
-        print(f"\n✗ Error: Manifest not found: {manifest_path}")
-        print("Run with --update-manifest first")
-        return 1
 
-    if not args.only_merge and not args.skip_data_prep:
+def phase2_flair_inference(args):
+    """Run FLAIR context-aware inference on orthophotos."""
+    if args.only_merge or args.skip_inference:
+        return True
+
+    checkpoint_path = Path(args.checkpoint)
+    if not checkpoint_path.exists():
+        print(f"\n✗ Error: Checkpoint not found: {checkpoint_path}")
+        return False
+
+    predictions_dir = f"predictions_{args.output_name}"
+
+    cmd = [
+        "python",
+        "src/inference/inference_flair_context.py",
+        "--manifest",
+        args.manifest,
+        "--checkpoint",
+        args.checkpoint,
+        "--output_dir",
+        predictions_dir,
+        "--tile_size",
+        str(args.tile_size),
+        "--overlap",
+        str(args.overlap),
+        "--grid_step",
+        str(args.grid_step),
+        "--splits",
+        *args.splits,
+    ]
+
+    if args.no_tta:
+        cmd.append("--no_tta")
+
+    return run_command(cmd, "PHASE 2: FLAIR context-aware inference")
+
+
+def phase3_merge_lidar_flair(args):
+    """Merge LiDAR and FLAIR classification maps."""
+    if args.only_merge or args.skip_lidar_flair_merge:
+        return True
+
+    for split in args.splits:
+        las_dir = f"data/{split}"
+        flair_dir = f"predictions_{args.output_name}/{split}"
+        output_dir = f"merged_classifications_{args.output_name}/{split}"
+
         if not run_command(
             [
                 "python",
-                "src/data_preparation/prepare_training_data_grandlyon.py",
-                "--manifest",
-                args.manifest,
-                "--resolution",
-                str(args.resolution),
-                "--workers",
-                str(args.workers),
+                "src/postprocessing/merge_classifications.py",
+                "--las-dir",
+                las_dir,
+                "--flair-dir",
+                flair_dir,
+                "--output-dir",
+                output_dir,
             ],
-            "PHASE 1: Data preparation (LiDAR + orthophotos)",
+            f"PHASE 3: Merge LiDAR + FLAIR for {split} split",
         ):
-            return 1
+            print(f"\n⚠ Warning: Merge failed for {split} split")
 
-    if not args.only_merge and not args.skip_inference:
-        checkpoint_path = Path(args.checkpoint)
-        if not checkpoint_path.exists():
-            print(f"\n✗ Error: Checkpoint not found: {checkpoint_path}")
-            return 1
+    return True
 
-        predictions_dir = f"predictions_{args.output_name}"
 
-        cmd = [
-            "python",
-            "src/inference/inference_flair_context.py",
-            "--manifest",
-            args.manifest,
-            "--checkpoint",
-            args.checkpoint,
-            "--output_dir",
-            predictions_dir,
-            "--tile_size",
-            str(args.tile_size),
-            "--overlap",
-            str(args.overlap),
-            "--grid_step",
-            str(args.grid_step),
-            "--splits",
-            *args.splits,
-        ]
-
-        if args.no_tta:
-            cmd.append("--no_tta")
-
-        if not run_command(cmd, "PHASE 2: FLAIR context-aware inference"):
-            return 1
-
-    if not args.only_merge and not args.skip_lidar_flair_merge:
-        for split in args.splits:
-            las_dir = f"data/{split}"
-            flair_dir = f"predictions_{args.output_name}/{split}"
-            output_dir = f"merged_classifications_{args.output_name}/{split}"
-
-            if not run_command(
-                [
-                    "python",
-                    "src/postprocessing/merge_classifications.py",
-                    "--las-dir",
-                    las_dir,
-                    "--flair-dir",
-                    flair_dir,
-                    "--output-dir",
-                    output_dir,
-                ],
-                f"PHASE 3: Merge LiDAR + FLAIR for {split} split",
-            ):
-                print(f"\n⚠ Warning: Merge failed for {split} split")
-
+def phase4_final_merge(args):
+    """Merge all tiles into final rasters."""
     for split in args.splits:
         merged_dir = f"merged_classifications_{args.output_name}/{split}"
         output_file = f"final_{args.output_name}_{split}.tif"
@@ -357,57 +365,101 @@ Examples:
             )
 
         if not run_command(cmd, f"PHASE 4: Final merge for {split} split"):
-            return 1
+            return False
 
-    if args.vectorize:
-        for split in args.splits:
-            output_file = f"final_{args.output_name}_{split}.tif"
+    return True
 
-            if not Path(output_file).exists():
-                print(f"\n✗ Warning: Final raster not found: {output_file}")
-                continue
 
-            ext_map = {
-                "ESRI Shapefile": "shp",
-                "GPKG": "gpkg",
-                "GeoJSON": "geojson"
-            }
-            ext = ext_map[args.vector_format]
-            vector_output = f"final_{args.output_name}_{split}.{ext}"
+def phase5_vectorization(args):
+    """Vectorize final rasters to vector format."""
+    if not args.vectorize:
+        return True
 
-            if not vectorize_raster(
-                output_file,
-                vector_output,
-                args.vector_format,
-                use_8connected=args.vector_8connected,
-                field_name="vegetation_class"
-            ):
-                print(f"\n⚠ Warning: Vectorization failed for {split} split")
+    for split in args.splits:
+        output_file = f"final_{args.output_name}_{split}.tif"
 
-    elapsed = time.time() - start_time
+        if not Path(output_file).exists():
+            print(f"\n✗ Warning: Final raster not found: {output_file}")
+            continue
 
+        ext_map = {"ESRI Shapefile": "shp", "GPKG": "gpkg", "GeoJSON": "geojson"}
+        ext = ext_map[args.vector_format]
+        vector_output = f"final_{args.output_name}_{split}.{ext}"
+
+        if not vectorize_raster(
+            output_file,
+            vector_output,
+            args.vector_format,
+            use_8connected=args.vector_8connected,
+            field_name="vegetation_class",
+        ):
+            print(f"\n⚠ Warning: Vectorization failed for {split} split")
+
+    return True
+
+
+def print_summary(args, elapsed):
+    """Print pipeline completion summary and output locations."""
     print("\n" + "=" * 70)
     print("PIPELINE COMPLETE")
     print("=" * 70)
-    print(f"Total time: {elapsed:.1f}s ({elapsed/60:.1f} minutes)")
+    print(f"Total time: {elapsed:.1f}s ({elapsed / 60:.1f} minutes)")
     print("\nOutputs:")
     print(f"  Predictions: predictions_{args.output_name}/")
     print(f"  Merged classifications: merged_classifications_{args.output_name}/")
+
     for split in args.splits:
         output_file = f"final_{args.output_name}_{split}.tif"
         if Path(output_file).exists():
             print(f"  Final {split} raster: {output_file}")
 
         if args.vectorize:
-            ext_map = {
-                "ESRI Shapefile": "shp",
-                "GPKG": "gpkg",
-                "GeoJSON": "geojson"
-            }
+            ext_map = {"ESRI Shapefile": "shp", "GPKG": "gpkg", "GeoJSON": "geojson"}
             ext = ext_map[args.vector_format]
             vector_output = f"final_{args.output_name}_{split}.{ext}"
             if Path(vector_output).exists():
                 print(f"  Final {split} vector: {vector_output}")
+
+
+def main():
+    """Execute the complete vegetation stratification pipeline."""
+    args = parse_arguments()
+    start_time = time.time()
+
+    print("=" * 70)
+    print("GRANDLYON VEGETATION STRATIFICATION PIPELINE")
+    print("=" * 70)
+    print(f"Manifest: {args.manifest}")
+    print(f"Checkpoint: {args.checkpoint}")
+    print(f"Resolution: {args.resolution}m")
+    print(f"Splits: {', '.join(args.splits)}")
+    print(f"Output prefix: {args.output_name}")
+
+    manifest_path = Path(args.manifest)
+
+    if not phase0_update_manifest(args):
+        return 1
+
+    if not manifest_path.exists():
+        print(f"\n✗ Error: Manifest not found: {manifest_path}")
+        print("Run with --update-manifest first")
+        return 1
+
+    if not phase1_data_preparation(args):
+        return 1
+
+    if not phase2_flair_inference(args):
+        return 1
+
+    phase3_merge_lidar_flair(args)
+
+    if not phase4_final_merge(args):
+        return 1
+
+    phase5_vectorization(args)
+
+    elapsed = time.time() - start_time
+    print_summary(args, elapsed)
 
     return 0
 

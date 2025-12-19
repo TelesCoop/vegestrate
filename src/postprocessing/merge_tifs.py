@@ -2,7 +2,7 @@ import argparse
 import glob
 import os
 import sys
-from typing import List, Optional
+from typing import Optional
 
 import geopandas as gpd
 import numpy as np
@@ -41,7 +41,7 @@ class TileMerger:
         self.clip_values = clip_values
         self.tiles_info = []
 
-    def scan_tiles(self, file_paths: List[str]) -> dict:
+    def scan_tiles(self, file_paths: list[str]) -> dict:
         """
         Scan all tiles to get metadata and calculate mosaic bounds.
 

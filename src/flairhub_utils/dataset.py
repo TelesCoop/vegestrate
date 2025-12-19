@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import numpy as np
 import rasterio
@@ -26,7 +26,7 @@ class FlairDataset(Dataset):
         split: str = "train",
         patch_size: int = 512,
         patches_per_tile: int = 100,
-        classes_to_train: Optional[List[str]] = None,
+        classes_to_train: Optional[list[str]] = None,
         augment: bool = True,
     ):
         """Initialize FlairDataset.
@@ -42,7 +42,7 @@ class FlairDataset(Dataset):
         self.patch_size = patch_size
         self.augment = augment
 
-        with open(data_manifest, "r") as f:
+        with open(data_manifest) as f:
             manifest = json.load(f)
 
         self.tiles_info = manifest[split]

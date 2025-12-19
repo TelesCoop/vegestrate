@@ -1,7 +1,7 @@
 import argparse
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
 import rasterio
@@ -13,7 +13,7 @@ from inference.flair_segmentation import FlairSegmentation
 
 def build_tile_map_from_manifest(
     manifest: dict, data_dir: Path
-) -> Dict[Tuple[int, int], Path]:
+) -> dict[tuple[int, int], Path]:
     """Build coordinate -> path mapping from all manifest entries.
 
     Args:
@@ -70,13 +70,13 @@ def process_split(
     entries: list,
     data_dir: Path,
     output_dir: Path,
-    tile_map: Dict[Tuple[int, int], Path],
+    tile_map: dict[tuple[int, int], Path],
     model: FlairSegmentation,
     tile_size: int,
     overlap: int,
     grid_step: int,
     use_tta: bool = True,
-    tta_modes: Optional[List[str]] = None,
+    tta_modes: Optional[list[str]] = None,
 ) -> int:
     """Process all tiles in a split.
 
@@ -134,7 +134,7 @@ def process_split(
     return processed_count
 
 
-def parse_tile_id(tile_id: str) -> Optional[Tuple[int, int]]:
+def parse_tile_id(tile_id: str) -> Optional[tuple[int, int]]:
     """Extract X,Y coordinates from tile ID.
 
     Args:
@@ -160,8 +160,8 @@ def parse_tile_id(tile_id: str) -> Optional[Tuple[int, int]]:
 
 
 def find_tile_neighbors(
-    tile_coords: Tuple[int, int], tile_map: Dict[Tuple[int, int], Path], grid_step: int
-) -> Dict[str, Optional[Path]]:
+    tile_coords: tuple[int, int], tile_map: dict[tuple[int, int], Path], grid_step: int
+) -> dict[str, Optional[Path]]:
     """Find the 8 neighboring tiles around a center tile.
 
     Args:
@@ -191,8 +191,8 @@ def find_tile_neighbors(
 
 
 def create_mosaic_from_tiles(
-    neighbors: Dict[str, Optional[Path]], tile_size: int = 625
-) -> Tuple[Optional[np.ndarray], Optional[dict]]:
+    neighbors: dict[str, Optional[Path]], tile_size: int = 625
+) -> tuple[Optional[np.ndarray], Optional[dict]]:
     """Create 3x3 mosaic from neighboring tiles.
 
     Args:
@@ -248,14 +248,14 @@ def create_mosaic_from_tiles(
 def process_tile_with_context(
     tile_id: str,
     tile_path: Path,
-    tile_map: Dict[Tuple[int, int], Path],
+    tile_map: dict[tuple[int, int], Path],
     model: FlairSegmentation,
     output_dir: Path,
     grid_step: int,
     tile_size: int,
     overlap: int,
     use_tta: bool = True,
-    tta_modes: Optional[List[str]] = None,
+    tta_modes: Optional[list[str]] = None,
 ) -> bool:
     """Process a single tile with neighboring context.
 

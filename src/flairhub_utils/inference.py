@@ -1,7 +1,3 @@
-"""Inference utilities for FLAIR-HUB segmentation."""
-
-from typing import Tuple
-
 import numpy as np
 import torch
 
@@ -127,7 +123,7 @@ class FlairInference:
     def merge_tile_predictions(
         tile_logits_list: list,
         tile_positions: list,
-        output_shape: Tuple[int, int],
+        output_shape: tuple[int, int],
         num_classes: int,
         overlap: int,
     ) -> np.ndarray:

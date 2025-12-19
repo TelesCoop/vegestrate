@@ -1,15 +1,15 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Callable, Dict, List, Tuple
+from typing import Callable
 
 import humanize
 
 
 def process_tiles_parallel(
-    all_tiles: List[Tuple],
+    all_tiles: list[tuple],
     process_func: Callable,
     max_workers: int = 4,
     verbose: bool = True,
-) -> Tuple[List[dict], List[dict]]:
+) -> tuple[list[dict], list[dict]]:
     """Process tiles in parallel using ThreadPoolExecutor.
 
     Args:
@@ -59,8 +59,8 @@ def process_tiles_parallel(
 
 
 def print_processing_summary(
-    successes: List[dict],
-    failures: List[dict],
+    successes: list[dict],
+    failures: list[dict],
     elapsed_time: float,
     verbose: bool = True,
 ):
@@ -91,7 +91,7 @@ def print_processing_summary(
         print(f"Average time per tile: {avg_time:.1f}s")
 
 
-def build_tile_list(manifest: Dict, split_dirs: Dict[str, any]) -> List[Tuple]:
+def build_tile_list(manifest: dict, split_dirs: dict[str, any]) -> list[tuple]:
     """Build list of tiles to process from manifest.
 
     Args:

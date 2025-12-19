@@ -1,7 +1,3 @@
-"""Class definitions and mappings for FLAIR-HUB land cover segmentation."""
-
-from typing import Dict
-
 import numpy as np
 
 # Original 19 FLAIR-HUB classes
@@ -94,7 +90,7 @@ def get_class_name(class_id: int, simplified: bool = True) -> str:
         return FLAIR_CLASSES.get(class_id, "unknown")
 
 
-def list_classes(simplified: bool = True) -> Dict[int, str]:
+def list_classes(simplified: bool = True) -> dict[int, str]:
     """
     List all available classes.
 

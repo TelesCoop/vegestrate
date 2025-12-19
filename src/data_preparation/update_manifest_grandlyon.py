@@ -31,7 +31,7 @@ def main():
     manifest_path = Path("data/dataset_manifest.json")
 
     matching_tiles = []
-    with open(csv_path, "r", encoding="utf-8-sig") as f:
+    with open(csv_path, encoding="utf-8-sig") as f:
         reader = csv.DictReader(f, delimiter=";")
         for row in reader:
             x_min = int(row["x_min"])
@@ -58,7 +58,7 @@ def main():
     for tile in matching_tiles:
         print(f"  - {tile['tile_id']}")
 
-    with open(manifest_path, "r") as f:
+    with open(manifest_path) as f:
         manifest = json.load(f)
 
     manifest["test"] = matching_tiles

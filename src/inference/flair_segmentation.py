@@ -1,7 +1,5 @@
-"""FLAIR-HUB Segmentation Wrapper."""
-
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
 import numpy as np
 import rasterio
@@ -437,7 +435,7 @@ class FlairSegmentation:
         else:
             return FLAIR_CLASSES.get(class_id, "unknown")
 
-    def list_classes(self, simplified: Optional[bool] = None) -> Dict[int, str]:
+    def list_classes(self, simplified: Optional[bool] = None) -> dict[int, str]:
         """List all available classes."""
         if simplified is None:
             simplified = self.use_simplified_classes

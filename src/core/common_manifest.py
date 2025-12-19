@@ -2,10 +2,9 @@
 
 import json
 from pathlib import Path
-from typing import Dict, List
 
 
-def load_manifest(manifest_path: str) -> Dict[str, List[dict]]:
+def load_manifest(manifest_path: str) -> dict[str, list[dict]]:
     """Load dataset manifest from JSON file.
 
     Args:
@@ -14,12 +13,12 @@ def load_manifest(manifest_path: str) -> Dict[str, List[dict]]:
     Returns:
         Dictionary with 'train' and 'test' lists of entries
     """
-    with open(manifest_path, "r") as f:
+    with open(manifest_path) as f:
         manifest = json.load(f)
     return manifest
 
 
-def save_manifest(manifest: Dict[str, List[dict]], output_path: str):
+def save_manifest(manifest: dict[str, list[dict]], output_path: str):
     """Save dataset manifest to JSON file.
 
     Args:
@@ -34,8 +33,8 @@ def save_manifest(manifest: Dict[str, List[dict]], output_path: str):
 
 
 def setup_split_directories(
-    base_dir: Path, splits: List[str] = None
-) -> Dict[str, Path]:
+    base_dir: Path, splits: list[str] = None
+) -> dict[str, Path]:
     """Create train/test/val directories.
 
     Args:

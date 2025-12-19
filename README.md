@@ -2,6 +2,8 @@
 
 Vous trouverez dans ce repos un wrapper pour [FLAIR-HUB](https://github.com/IGNF/FLAIR-HUB) pour faire de l'inférence directement et des fonctions pour faire du fine-tunning. Les poids de FLAIR-HUB sont sur [HuggingFace](https://huggingface.co/IGNF/FLAIR-HUB_LC-A_RGB_swinlarge-upernet).
 
+Ce travail a été réalisé dans le cadre du projet [IA.rbre](https://iarbre.fr) et vous pouvez trouver les autres calque sur notre plateforme [carte.iarbre.fr](https://carte.iarbre.fr).
+
 ## 📊 Origine des données
 
 Les données d'inventaire du végétal stratifié ont été produites par un travail conjoint entre [TelesCoop](https://www.telescoop.fr/) et le [LIRIS](https://liris.cnrs.fr/). Le LIRIS a produit une note sur les méthodes permettant de produire un inventaire de végétation en contexte urbain qui se trouve [ici](https://github.com/VCityTeam/UD-IArbre-Research/blob/master/vegetalisation/Pr%C3%A9sentation%20Cotech%2020-11-2025%20Segmentation%20V%C3%A9g%C3%A9talisation.pdf). Puis, chez TelesCoop nous avons industrialisé la démarche et proposé un pipeline automatisé.
@@ -57,3 +59,37 @@ Le modèle FLAIR-HUB permet à une résolution très compétitive, 80cm, des dé
 
 Nous ne disposons pas de vérité terrain à l'échelle de la Métropole, car cette donnée n'existe pas, qui permetterait de calculer des métriques quantitatives de performance. Pour évaluer la performance nous sommes dépendants d'évaluations qualitatives avec les orthophotos en dessous de plan ou à l'aide d'experts d'un territoire précis.
 
+## 🛠️ Configuration de Pre-Commit
+
+1. **Installer pre-commit** :
+
+```bash
+pip install pre-commit
+```
+
+2. **Installer les hooks** :
+
+```bash
+pre-commit install
+```
+
+3. **Exécuter manuellement les hooks (optionnel)** :
+
+```bash
+pre-commit run --all-files
+```
+
+C'est tout ! Maintenant, à chaque commit, `pre-commit` vérifiera automatiquement votre code. 🧹✨
+
+
+## 🤝 Contribution
+
+Si vous avez des idées, des bugs ou des demandes de fonctionnalités, n'hésitez pas à ouvrir une [issue](https://github.com/TelesCoop/iarbre/issues).
+
+Vous pouvez également contribuer directement en proposant de nouvelles fonctionnalités :
+
+1. **Forker le dépôt**
+2. **Créer une branche de fonctionnalité** : `git checkout -b ma-fonctionnalite-geniale`
+3. **Valider vos modifications** : `git commit -m "Ajouter une fonctionnalité géniale"`
+4. **Pousser votre branche** : `git push origin ma-fonctionnalite-geniale`
+5. **Ouvrir une Pull Request**

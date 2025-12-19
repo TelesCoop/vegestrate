@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -9,7 +9,7 @@ from safetensors.torch import load_file as safe_load_file
 from .class_mappings import SIMPLIFIED_CLASSES
 
 
-def build_flair_config(num_classes: int = 19) -> Dict:
+def build_flair_config(num_classes: int = 19) -> dict:
     """
     Build configuration dictionary for FLAIR model.
 

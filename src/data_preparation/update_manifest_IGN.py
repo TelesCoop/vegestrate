@@ -37,7 +37,7 @@ def read_urls_from_file(file_path: str) -> list:
         List of URLs (stripped of whitespace)
     """
     urls = []
-    with open(file_path, "r") as f:
+    with open(file_path) as f:
         for line in f:
             line = line.strip()
             if line and not line.startswith("#"):
