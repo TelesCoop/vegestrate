@@ -6,7 +6,7 @@ import rasterio
 import torch
 import torch.nn.functional as F
 
-from flairhub_utils import (
+from ..flairhub_utils import (
     FLAIR_CLASSES,
     SIMPLIFIED_CLASSES,
     FlairInference,

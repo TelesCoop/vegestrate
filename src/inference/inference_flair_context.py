@@ -7,8 +7,8 @@ import numpy as np
 import rasterio
 from rasterio.windows import Window
 
-from core import load_manifest
-from inference.flair_segmentation import FlairSegmentation
+from ..core import load_manifest
+from .flair_segmentation import FlairSegmentation
 
 
 def build_tile_map_from_manifest(

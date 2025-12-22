@@ -26,7 +26,7 @@ from pathlib import Path
 import laspy
 import rasterio
 
-from core import (
+from ..core import (
     build_tile_list,
     create_classification_map,
     download_file,

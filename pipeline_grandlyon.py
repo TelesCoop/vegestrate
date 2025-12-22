@@ -109,12 +109,6 @@ Examples:
     )
 
     parser.add_argument(
-        "--update-manifest",
-        action="store_true",
-        help="Update manifest from CSV before processing",
-    )
-
-    parser.add_argument(
         "--checkpoint",
         type=str,
         default="FLAIR-HUB_LC-A_RGB_swinlarge-upernet.safetensors",
@@ -236,16 +230,6 @@ Examples:
     return parser.parse_args()
 
 
-def phase0_update_manifest(args):
-    """Update manifest from CSV if requested."""
-    if not args.update_manifest:
-        return True
-    return run_command(
-        ["python", "src/data_preparation/update_manifest_grandlyon.py"],
-        "PHASE 0: Update manifest from CSV",
-    )
-
-
 def phase1_data_preparation(args):
     """Prepare training data from LiDAR and orthophotos."""
     if args.only_merge or args.skip_data_prep:
@@ -253,7 +237,8 @@ def phase1_data_preparation(args):
     return run_command(
         [
             "python",
-            "src/data_preparation/prepare_training_data_grandlyon.py",
+            "-m",
+            "src.data_preparation.prepare_training_data_grandlyon",
             "--manifest",
             args.manifest,
             "--resolution",
@@ -279,7 +264,8 @@ def phase2_flair_inference(args):
 
     cmd = [
         "python",
-        "src/inference/inference_flair_context.py",
+        "-m",
+        "src.inference.inference_flair_context",
         "--manifest",
         args.manifest,
         "--checkpoint",
@@ -315,7 +301,8 @@ def phase3_merge_lidar_flair(args):
         if not run_command(
             [
                 "python",
-                "src/postprocessing/merge_classifications.py",
+                "-m",
+                "src.postprocessing.merge_classifications",
                 "--las-dir",
                 las_dir,
                 "--flair-dir",
@@ -342,7 +329,8 @@ def phase4_final_merge(args):
 
         cmd = [
             "python",
-            "src/postprocessing/merge_tifs.py",
+            "-m",
+            "src.postprocessing.merge_tifs",
             "--input",
             merged_dir,
             "--output",
@@ -436,9 +424,6 @@ def main():
     print(f"Output prefix: {args.output_name}")
 
     manifest_path = Path(args.manifest)
-
-    if not phase0_update_manifest(args):
-        return 1
 
     if not manifest_path.exists():
         print(f"\n✗ Error: Manifest not found: {manifest_path}")

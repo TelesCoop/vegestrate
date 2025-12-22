@@ -1,14 +1,11 @@
-#!/usr/bin/env python3
-"""Update dataset_manifest.json with GrandLyon tiles from a rectangle."""
-
 import csv
 import json
 from pathlib import Path
 
-RECT_X_MIN = 1843000
-RECT_Y_MIN = 5173500
-RECT_X_MAX = 1851000
-RECT_Y_MAX = 5177500
+RECT_X_MIN = 1836000
+RECT_Y_MIN = 5165000
+RECT_X_MAX = 1858000
+RECT_Y_MAX = 5190000
 
 
 def tile_intersects_rectangle(x_min, y_min, x_max, y_max):
@@ -28,7 +25,7 @@ def tile_intersects_rectangle(x_min, y_min, x_max, y_max):
 
 def main():
     csv_path = Path("data/nuage-de-points-lidar-2023-de-la-metropole-de-lyon.csv")
-    manifest_path = Path("data/dataset_manifest.json")
+    manifest_path = Path("data/dataset_manifest_grandlyon.json")
 
     matching_tiles = []
     with open(csv_path, encoding="utf-8-sig") as f:

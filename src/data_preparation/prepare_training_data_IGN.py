@@ -25,7 +25,7 @@ from pathlib import Path
 
 import laspy
 
-from core import (
+from ..core import (
     build_tile_list,
     create_classification_map,
     download_file,
@@ -36,7 +36,7 @@ from core import (
     process_tiles_parallel,
     setup_split_directories,
 )
-from data_preparation.fetch_wms_from_raster import fetch_wms_for_raster
+from .fetch_wms_from_raster import fetch_wms_for_raster
 
 WMS_URL = "https://data.geopf.fr/wms-r"
 WMS_LAYER = "HR.ORTHOIMAGERY.ORTHOPHOTOS"
