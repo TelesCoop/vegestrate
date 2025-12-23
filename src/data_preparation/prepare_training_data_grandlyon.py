@@ -25,14 +25,14 @@ from pathlib import Path
 
 import laspy
 import rasterio
+import os
 
-from ..core import (
+from src.core import (
     build_tile_list,
     create_classification_map,
     download_file,
     filter_ground_vegetation,
     load_manifest,
-    print_classification_info,
     print_processing_summary,
     process_tiles_parallel,
     resize_and_save,
@@ -85,7 +85,6 @@ def download_and_process_lidar(url, output_dir, resolution=0.8):
     print(f"Processing tile: {tile_name}")
     print(f"{'=' * 70}")
 
-    # Download if not exists
     if not laz_path.exists():
         print(f"Downloading LiDAR data from {url}...")
         download_file(url, str(laz_path))
@@ -97,13 +96,12 @@ def download_and_process_lidar(url, output_dir, resolution=0.8):
     las = laspy.read(str(laz_path))
     print(f"✓ Loaded {len(las.points):,} points")
 
-    print_classification_info(las)
-
     filtered_las = filter_ground_vegetation(las, lyon=True)
 
     classmap_path = output_dir / f"classification_map_{tile_name}.tif"
-    create_classification_map(filtered_las, las, classmap_path, resolution=resolution)
 
+    create_classification_map(filtered_las, las, classmap_path, resolution=resolution)
+    os.remove(laz_path)
     return classmap_path
 
 

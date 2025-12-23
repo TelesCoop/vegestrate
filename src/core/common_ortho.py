@@ -32,7 +32,6 @@ def resize_and_save(raster_path, resolution, bounds, crs, output_path):
     )
 
     print(f"  Resized array shape: {img_array.shape}")
-    print(f"  New transform: {transform}")
 
     if img_resized.mode == "RGB":
         count = 3

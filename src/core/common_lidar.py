@@ -94,7 +94,6 @@ def create_classification_map(
     raster, affine, las_crs = classification_to_raster(
         filtred_las, las, cell_size=resolution
     )
-    print(f"✓ Raster shape: {raster.shape}")
 
     # Use CRS from LAS file if available, otherwise use the provided crs parameter
     final_crs = las_crs if las_crs is not None else crs
