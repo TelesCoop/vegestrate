@@ -3,7 +3,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from osgeo import gdal, ogr
+from src.postprocessing.vectorize_raster import vectorize_raster
 
 
 def run_command(cmd, description):
@@ -20,62 +20,6 @@ def run_command(cmd, description):
         return False
 
     print(f"\n✓ {description} complete")
-    return True
-
-
-def vectorize_raster(
-    raster_path, vector_path, vector_format, use_8connected=False, field_name="DN"
-):
-    """Vectorize a raster to polygons using GDAL Python API."""
-    print(f"\n{'=' * 70}")
-    print(f"Vectorizing: {raster_path} -> {vector_path}")
-    print(f"Format: {vector_format}, 8-connected: {use_8connected}")
-    print(f"{'=' * 70}\n")
-
-    src_ds = gdal.Open(str(raster_path))
-    if src_ds is None:
-        print(f"✗ Error: Could not open raster: {raster_path}")
-        return False
-
-    src_band = src_ds.GetRasterBand(1)
-
-    driver_name = (
-        vector_format if vector_format != "ESRI Shapefile" else "ESRI Shapefile"
-    )
-    drv = ogr.GetDriverByName(driver_name)
-    if drv is None:
-        print(f"✗ Error: Could not get driver: {driver_name}")
-        return False
-
-    if Path(vector_path).exists():
-        drv.DeleteDataSource(str(vector_path))
-
-    dst_ds = drv.CreateDataSource(str(vector_path))
-    if dst_ds is None:
-        print(f"✗ Error: Could not create vector file: {vector_path}")
-        return False
-
-    srs = None
-    if src_ds.GetProjection():
-        from osgeo import osr
-
-        srs = osr.SpatialReference()
-        srs.ImportFromWkt(src_ds.GetProjection())
-
-    dst_layer = dst_ds.CreateLayer("vegetation", srs=srs)
-    field_defn = ogr.FieldDefn(field_name, ogr.OFTInteger)
-    dst_layer.CreateField(field_defn)
-
-    options = []
-    if use_8connected:
-        options.append("8CONNECTED=8")
-
-    gdal.Polygonize(src_band, None, dst_layer, 0, options, callback=gdal.TermProgress)
-
-    dst_ds = None
-    src_ds = None
-
-    print(f"\n✓ Vectorization complete: {vector_path}")
     return True
 
 
