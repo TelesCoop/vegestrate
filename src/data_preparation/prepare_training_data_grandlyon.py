@@ -99,7 +99,7 @@ def download_and_process_lidar(url, output_dir, resolution=0.8):
 
     print_classification_info(las)
 
-    filtered_las = filter_ground_vegetation(las)
+    filtered_las = filter_ground_vegetation(las, lyon=True)
 
     classmap_path = output_dir / f"classification_map_{tile_name}.tif"
     create_classification_map(filtered_las, las, classmap_path, resolution=resolution)
