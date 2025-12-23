@@ -1,26 +1,53 @@
 import argparse
-import subprocess
 import sys
 import time
 from pathlib import Path
-from src.postprocessing.vectorize_raster import vectorize_raster
 
 
-def run_command(cmd, description):
-    """Run a subprocess command and handle errors."""
+def run_module_main(module_path: str, args: list[str], description: str) -> bool:
+    """
+    Import and run a module's main() function with custom arguments.
+
+    Args:
+        module_path: Module path (e.g., 'src.data_preparation.prepare_training_data_grandlyon')
+        args: List of command-line arguments to pass
+        description: Description of the operation for logging
+
+    Returns:
+        True if successful, False otherwise
+    """
     print(f"\n{'=' * 70}")
     print(f"{description}")
     print(f"{'=' * 70}")
-    print(f"Command: {' '.join(cmd)}\n")
+    print(f"Module: {module_path}")
+    print(f"Args: {' '.join(args)}\n")
 
-    result = subprocess.run(cmd)
+    try:
+        import importlib
 
-    if result.returncode != 0:
-        print(f"\n✗ Error: {description} failed with code {result.returncode}")
+        module = importlib.import_module(module_path)
+
+        old_argv = sys.argv.copy()
+        sys.argv = [module_path] + args
+
+        try:
+            result = module.main()
+            success = result == 0 if result is not None else True
+        finally:
+            sys.argv = old_argv
+
+        if success:
+            print(f"\n✓ {description} complete")
+        else:
+            print(f"\n✗ Error: {description} failed")
+        return success
+
+    except Exception as e:
+        print(f"\n✗ Error: {description} failed with exception: {e}")
+        import traceback
+
+        traceback.print_exc()
         return False
-
-    print(f"\n✓ {description} complete")
-    return True
 
 
 def parse_arguments():
@@ -174,15 +201,14 @@ Examples:
     return parser.parse_args()
 
 
-def phase1_data_preparation(args):
+def phase1_data_preparation(args) -> bool:
     """Prepare training data from LiDAR and orthophotos."""
     if args.only_merge or args.skip_data_prep:
         return True
-    return run_command(
+
+    return run_module_main(
+        "src.data_preparation.prepare_training_data_grandlyon",
         [
-            "python",
-            "-m",
-            "src.data_preparation.prepare_training_data_grandlyon",
             "--manifest",
             args.manifest,
             "--resolution",
@@ -194,7 +220,7 @@ def phase1_data_preparation(args):
     )
 
 
-def phase2_flair_inference(args):
+def phase2_flair_inference(args) -> bool:
     """Run FLAIR context-aware inference on orthophotos."""
     if args.only_merge or args.skip_inference:
         return True
@@ -206,10 +232,7 @@ def phase2_flair_inference(args):
 
     predictions_dir = f"predictions_{args.output_name}"
 
-    cmd = [
-        "python",
-        "-m",
-        "src.inference.inference_flair_context",
+    cmd_args = [
         "--manifest",
         args.manifest,
         "--checkpoint",
@@ -227,12 +250,16 @@ def phase2_flair_inference(args):
     ]
 
     if args.no_tta:
-        cmd.append("--no_tta")
+        cmd_args.append("--no_tta")
 
-    return run_command(cmd, "PHASE 2: FLAIR context-aware inference")
+    return run_module_main(
+        "src.inference.inference_flair_context",
+        cmd_args,
+        "PHASE 2: FLAIR context-aware inference",
+    )
 
 
-def phase3_merge_lidar_flair(args):
+def phase3_merge_lidar_flair(args) -> bool:
     """Merge LiDAR and FLAIR classification maps."""
     if args.only_merge or args.skip_lidar_flair_merge:
         return True
@@ -242,11 +269,9 @@ def phase3_merge_lidar_flair(args):
         flair_dir = f"predictions_{args.output_name}/{split}"
         output_dir = f"merged_classifications_{args.output_name}/{split}"
 
-        if not run_command(
+        if not run_module_main(
+            "src.postprocessing.merge_classifications",
             [
-                "python",
-                "-m",
-                "src.postprocessing.merge_classifications",
                 "--las-dir",
                 las_dir,
                 "--flair-dir",
@@ -261,7 +286,7 @@ def phase3_merge_lidar_flair(args):
     return True
 
 
-def phase4_final_merge(args):
+def phase4_final_merge(args) -> bool:
     """Merge all tiles into final rasters."""
     for split in args.splits:
         merged_dir = f"merged_classifications_{args.output_name}/{split}"
@@ -271,10 +296,7 @@ def phase4_final_merge(args):
             print(f"\n✗ Warning: Merged directory not found: {merged_dir}")
             continue
 
-        cmd = [
-            "python",
-            "-m",
-            "src.postprocessing.merge_tifs",
+        cmd_args = [
             "--input",
             merged_dir,
             "--output",
@@ -288,7 +310,7 @@ def phase4_final_merge(args):
         ]
 
         if args.smooth:
-            cmd.extend(
+            cmd_args.extend(
                 [
                     "--smooth",
                     "--pixel-size",
@@ -296,16 +318,27 @@ def phase4_final_merge(args):
                 ]
             )
 
-        if not run_command(cmd, f"PHASE 4: Final merge for {split} split"):
+        if not run_module_main(
+            "src.postprocessing.merge_tifs",
+            cmd_args,
+            f"PHASE 4: Final merge for {split} split",
+        ):
             return False
 
     return True
 
 
-def phase5_vectorization(args):
+def phase5_vectorization(args) -> bool:
     """Vectorize final rasters to vector format."""
     if not args.vectorize:
         return True
+
+    try:
+        from src.postprocessing.vectorize_raster import vectorize_raster
+    except ImportError as e:
+        print(f"\n✗ Error: Cannot import vectorize_raster: {e}")
+        print("Make sure GDAL Python bindings are installed: pip install gdal")
+        return False
 
     for split in args.splits:
         output_file = f"final_{args.output_name}_{split}.tif"
@@ -317,6 +350,10 @@ def phase5_vectorization(args):
         ext_map = {"ESRI Shapefile": "shp", "GPKG": "gpkg", "GeoJSON": "geojson"}
         ext = ext_map[args.vector_format]
         vector_output = f"final_{args.output_name}_{split}.{ext}"
+
+        print(f"\n{'=' * 70}")
+        print(f"PHASE 5: Vectorization for {split} split")
+        print(f"{'=' * 70}\n")
 
         if not vectorize_raster(
             output_file,
@@ -330,7 +367,7 @@ def phase5_vectorization(args):
     return True
 
 
-def print_summary(args, elapsed):
+def print_summary(args, elapsed: float) -> None:
     """Print pipeline completion summary and output locations."""
     print("\n" + "=" * 70)
     print("PIPELINE COMPLETE")
@@ -353,8 +390,12 @@ def print_summary(args, elapsed):
                 print(f"  Final {split} vector: {vector_output}")
 
 
-def main():
-    """Execute the complete vegetation stratification pipeline."""
+def main() -> int:
+    """Execute the complete vegetation stratification pipeline.
+
+    Returns:
+        0 on success, 1 on failure
+    """
     args = parse_arguments()
     start_time = time.time()
 

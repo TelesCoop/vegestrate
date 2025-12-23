@@ -93,3 +93,90 @@ Vous pouvez également contribuer directement en proposant de nouvelles fonction
 3. **Valider vos modifications** : `git commit -m "Ajouter une fonctionnalité géniale"`
 4. **Pousser votre branche** : `git push origin ma-fonctionnalite-geniale`
 5. **Ouvrir une Pull Request**
+
+## 📦 Installation
+
+### 1. Installer le package
+
+Depuis la racine du projet, installer le package en mode éditable :
+
+```bash
+pip install -e .
+```
+
+Cette commande installe le package `vegestrate` et configure correctement tous les imports `src.*` utilisés dans le projet.
+
+### 2. Dépendances système
+
+**GDAL** (requis pour la vectorisation uniquement) :
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install gdal-bin libgdal-dev
+
+# Puis installer les bindings Python avec la version correspondante
+pip install gdal==$(gdal-config --version)
+```
+
+Si vous n'utilisez pas la fonctionnalité de vectorisation, GDAL n'est pas nécessaire.
+
+### 3. Dépendances Python
+
+Installer toutes les dépendances Python listées dans `requirements.txt` :
+
+```bash
+pip install -r requirements.txt
+```
+
+**Note importante :** FLAIR-HUB sera installé depuis le dépôt GitHub :
+
+### Structure du package
+
+Après installation, la structure du package est la suivante :
+
+```
+vegestrate/
+├── src/                    # Package principal (installé en tant que 'src')
+│   ├── core/              # Utilitaires LiDAR et raster
+│   ├── flairhub_utils/    # Utilitaires pour le modèle FLAIR-HUB
+│   ├── inference/         # Modules d'inférence
+│   ├── data_preparation/  # Scripts de préparation des données
+│   └── postprocessing/    # Outils de post-traitement
+├── pyproject.toml         # Configuration du package
+├── setup.py               # Script de setup
+└── requirements.txt       # Dépendances
+```
+
+### Commandes disponibles
+
+Après installation, plusieurs commandes sont disponibles :
+
+```bash
+# Pipeline complet
+vegestrate-pipeline --checkpoint model.safetensors
+
+# Étapes individuelles
+vegestrate-update-manifest              # Mettre à jour le manifeste
+vegestrate-prepare-data --workers 8     # Préparer les données
+vegestrate-inference --checkpoint model.safetensors  # Inférence FLAIR
+vegestrate-merge-classifications        # Fusion LiDAR + FLAIR
+vegestrate-merge-tifs --input merged/ --output final.tif  # Fusion finale
+vegestrate-vectorize -i final.tif -o final.gpkg  # Vectorisation
+```
+
+Vous pouvez aussi utiliser les modules Python directement :
+
+```bash
+python -m src.data_preparation.update_manifest_grandlyon
+python -m src.postprocessing.vectorize_raster -i input.tif -o output.gpkg
+python pipeline_grandlyon.py --help
+```
+
+### Patterns d'imports
+
+Tous les modules utilisent des imports absolus depuis `src` :
+
+```python
+from src.core import create_classification_map
+from src.flairhub_utils import load_flair_model
+```

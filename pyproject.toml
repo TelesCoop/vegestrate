@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vegestrate"
+version = "0.1.0"
+description = "Vegetation stratification inventory system for Métropole de Lyon using LiDAR and deep learning (FLAIR-HUB)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "TelesCoop", email = "ludovic@telescoop.fr"}
+]
+keywords = ["lidar", "vegetation", "segmentation", "deep-learning", "geospatial"]
+
+dependencies = [
+    "geopandas>=0.10.0",
+    "humanize>=3.0.0",
+    "laspy[lazrs]>=2.0.0",
+    "numpy>=1.21.0,<2.0.0",
+    "Pillow>=9.0.0",
+    "rasterio>=1.3.0",
+    "requests>=2.26.0",
+    "safetensors>=0.3.0",
+    "scipy>=1.7.0",
+    "shapely>=2.0.0",
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "tqdm>=4.60.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "flake8",
+]
+
+[project.scripts]
+vegestrate-pipeline = "pipeline_grandlyon:main"
+vegestrate-update-manifest = "src.data_preparation.update_manifest_grandlyon:main"
+vegestrate-prepare-data = "src.data_preparation.prepare_training_data_grandlyon:main"
+vegestrate-inference = "src.inference.inference_flair_context:main"
+vegestrate-merge-classifications = "src.postprocessing.merge_classifications:main"
+vegestrate-merge-tifs = "src.postprocessing.merge_tifs:main"
+vegestrate-vectorize = "src.postprocessing.vectorize_raster:main"
+
+[project.urls]
+Homepage = "https://github.com/TelesCoop/vegestrate"
+Repository = "https://github.com/TelesCoop/vegestrate"
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
