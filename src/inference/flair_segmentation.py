@@ -338,7 +338,6 @@ class FlairSegmentation:
             outputs = []
 
             for i, mode in enumerate(aug_modes, 1):
-                print(f"\nTTA pass {i}/{len(aug_modes)}: {mode}")
                 aug_image = self._augment_image(image_data, mode)
 
                 if mode in ["rot90", "rot270"]:

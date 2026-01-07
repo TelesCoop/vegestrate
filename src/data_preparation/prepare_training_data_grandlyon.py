@@ -117,7 +117,7 @@ def download_orthophoto(tile_name, output_dir, resolution=0.8):
     Returns:
         Path to orthophoto.tif
     """
-    ortho_path = output_dir / f"orthophoto_{tile_name}.tif"
+    ortho_path = output_dir / f"{tile_name}_orthophoto.tif"
 
     if ortho_path.exists():
         print(f"✓ Orthophoto already exists: {ortho_path}")
