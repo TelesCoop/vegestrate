@@ -104,7 +104,6 @@ class FlairSegmentation:
 
             height, width = image_data.shape[:2]
             meta = src.meta.copy()
-
         return image_data, height, width, meta
 
     def _process_tile(self, tile_image, tile_h, tile_w, class_id):
@@ -303,21 +302,9 @@ class FlairSegmentation:
         Returns:
             Path to output file
         """
-        print(f"\nSegmenting image: {image_path}")
-        if class_id is not None:
-            class_name = self.get_class_name(class_id)
-            print(f"Target class: {class_id} - {class_name}")
-        else:
-            mode_str = "4 classes" if self.use_simplified_classes else "19 classes"
-            print(f"Mode: Full class map ({mode_str})")
-        print(f"Tile size: {tile_size}, Overlap: {overlap}")
-
         if use_tta:
             if tta_modes is None:
                 tta_modes = ["hflip", "vflip", "hvflip"]
-            all_modes = ["original"] + tta_modes
-            print(f"TTA enabled with modes: {all_modes}")
-            print(f"  ({len(all_modes)}x computation)")
 
         self._load_model(tile_size)
         image_data, height, width, meta = self._load_and_normalize_image(image_path)
@@ -354,7 +341,6 @@ class FlairSegmentation:
                 )
                 outputs.append(aug_output)
 
-            print("\nAveraging TTA predictions...")
             output = np.mean(outputs, axis=0).astype(np.float32)
 
         if class_id is not None:
@@ -403,26 +389,10 @@ class FlairSegmentation:
 
         if self.num_classes == 19 and self.use_simplified_classes:
             class_map = remap_to_4_classes(class_map)
-            classes_dict = SIMPLIFIED_CLASSES
-            print("\n✓ Remapped 19 classes to 4 simplified classes")
-        elif self.num_classes == 4:
-            classes_dict = SIMPLIFIED_CLASSES
-        else:
-            classes_dict = FLAIR_CLASSES
 
         meta.update({"count": 1, "dtype": "uint8", "nodata": 255})
         with rasterio.open(output_path, "w", **meta) as dst:
             dst.write(class_map, 1)
-
-        print(f"\n✓ Class map saved to {output_path}")
-        unique, counts = np.unique(class_map, return_counts=True)
-        print("  Class distribution:")
-        for cls, cnt in zip(unique, counts):
-            class_name = classes_dict.get(cls, "unknown")
-            print(
-                f"    {cls:2d} ({class_name:20s}): {cnt:8d} pixels "
-                f"({100 * cnt / class_map.size:.2f}%)"
-            )
 
     def get_class_name(self, class_id: int, simplified: Optional[bool] = None) -> str:
         """Get class name from ID."""
