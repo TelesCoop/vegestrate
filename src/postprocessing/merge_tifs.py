@@ -22,6 +22,8 @@ class TileMerger:
         merge_strategy: str = "mode",
         nodata: Optional[float] = None,
         clip_values: Optional[tuple] = None,
+        resolution_tolerance: float = 1e-3,
+        resample_mismatch: bool = False,
     ):
         """
         Initialize the tile merger.
@@ -30,6 +32,8 @@ class TileMerger:
             merge_strategy: Strategy for overlapping pixels ('mode', 'last')
             nodata: NoData value to use (None = auto-detect from first file)
             clip_values: Tuple (min, max) to clip output values (e.g., (0, 3))
+            resolution_tolerance: Tolerance for resolution matching (default: 1e-3)
+            resample_mismatch: Resample tiles with mismatched resolutions (default: False)
         """
         valid_strategies = ["mode", "last"]
         if merge_strategy not in valid_strategies:
@@ -39,7 +43,76 @@ class TileMerger:
         self.merge_strategy = merge_strategy
         self.nodata = nodata
         self.clip_values = clip_values
+        self.resolution_tolerance = resolution_tolerance
+        self.resample_mismatch = resample_mismatch
         self.tiles_info = []
+        self.ref_res = None
+
+    def _check_resolution_mismatch(self, tile_res: tuple, ref_res: tuple, fpath: str):
+        """Check and handle resolution mismatches."""
+        res_diff_x = abs(tile_res[0] - ref_res[0])
+        res_diff_y = abs(tile_res[1] - ref_res[1])
+
+        if (
+            res_diff_x > self.resolution_tolerance
+            or res_diff_y > self.resolution_tolerance
+        ):
+            if self.resample_mismatch:
+                print(
+                    f"  Warning: {fpath} has resolution {tile_res}, resampling to {ref_res}"
+                )
+                self.tiles_info[-1]["needs_resample"] = True
+            else:
+                raise ValueError(
+                    f"Resolution mismatch: {fpath} has {tile_res}, expected {ref_res}. "
+                    f"Difference: ({res_diff_x:.10f}, {res_diff_y:.10f}). "
+                    f"Use --tolerance to increase tolerance or --resample-mismatch to auto-resample."
+                )
+
+    def _validate_tile_metadata(
+        self, src, fpath: str, ref_crs, ref_res, ref_dtype, ref_count
+    ):
+        """Validate tile metadata against reference."""
+        if ref_crs is None or ref_res is None:
+            raise ValueError("Reference metadata not initialized")
+
+        if src.crs != ref_crs:
+            raise ValueError(
+                f"CRS mismatch: {fpath} has {src.crs} (EPSG:{src.crs.to_epsg()}), "
+                f"expected {ref_crs} (EPSG:{ref_crs.to_epsg()})"
+            )
+
+        tile_res = (src.transform.a, src.transform.e)
+        self._check_resolution_mismatch(tile_res, ref_res, fpath)
+
+        if src.dtypes[0] != ref_dtype:
+            print(f"Warning: dtype mismatch in {fpath}: {src.dtypes[0]} vs {ref_dtype}")
+
+        if src.count != ref_count:
+            raise ValueError(
+                f"Band count mismatch: {fpath} has {src.count}, expected {ref_count}"
+            )
+
+    def _get_tile_dimensions(self, tile: dict, ref_res: tuple) -> tuple[int, int]:
+        """Get tile dimensions, accounting for resampling."""
+        if tile["needs_resample"]:
+            target_height = int(
+                np.round((tile["bounds"].top - tile["bounds"].bottom) / abs(ref_res[1]))
+            )
+            target_width = int(
+                np.round((tile["bounds"].right - tile["bounds"].left) / ref_res[0])
+            )
+            return target_width, target_height
+        return tile["shape"][1], tile["shape"][0]
+
+    def _calculate_tile_windows(self, min_x: float, max_y: float, ref_res: tuple):
+        """Calculate window positions for all tiles."""
+        for tile in self.tiles_info:
+            col_off = int(np.round((tile["bounds"].left - min_x) / ref_res[0]))
+            row_off = int(np.round((max_y - tile["bounds"].top) / abs(ref_res[1])))
+
+            tile_width, tile_height = self._get_tile_dimensions(tile, ref_res)
+            tile["window"] = Window(col_off, row_off, tile_width, tile_height)
 
     def scan_tiles(self, file_paths: list[str]) -> dict:
         """
@@ -67,6 +140,8 @@ class TileMerger:
         for i, fpath in enumerate(file_paths, 1):
             with rasterio.open(fpath) as src:
                 bounds = src.bounds
+                needs_resample = False
+
                 self.tiles_info.append(
                     {
                         "path": fpath,
@@ -74,6 +149,8 @@ class TileMerger:
                         "transform": src.transform,
                         "shape": src.shape,
                         "window": None,  # Will be calculated later
+                        "needs_resample": needs_resample,
+                        "original_res": (src.transform.a, src.transform.e),
                     }
                 )
 
@@ -85,6 +162,7 @@ class TileMerger:
                 if ref_crs is None:
                     ref_crs = src.crs
                     ref_res = (src.transform.a, src.transform.e)
+                    self.ref_res = ref_res
                     ref_dtype = src.dtypes[0]
                     ref_count = src.count
                     if self.nodata is None:
@@ -93,43 +171,22 @@ class TileMerger:
                         f"  Reference CRS: {ref_crs} (EPSG:{ref_crs.to_epsg() if ref_crs.to_epsg() else 'custom'})"
                     )
                 else:
-                    if src.crs != ref_crs:
-                        raise ValueError(
-                            f"CRS mismatch: {fpath} has {src.crs} (EPSG:{src.crs.to_epsg()}), "
-                            f"expected {ref_crs} (EPSG:{ref_crs.to_epsg()})"
-                        )
-                    tile_res = (src.transform.a, src.transform.e)
-                    if (
-                        abs(tile_res[0] - ref_res[0]) > 1e-4
-                        or abs(tile_res[1] - ref_res[1]) > 1e-4
-                    ):
-                        raise ValueError(
-                            f"Resolution mismatch: {fpath} has {tile_res}, expected {ref_res}"
-                        )
-                    if src.dtypes[0] != ref_dtype:
-                        print(
-                            f"Warning: dtype mismatch in {fpath}: {src.dtypes[0]} vs {ref_dtype}"
-                        )
-                    if src.count != ref_count:
-                        raise ValueError(
-                            f"Band count mismatch: {fpath} has {src.count}, expected {ref_count}"
-                        )
+                    self._validate_tile_metadata(
+                        src, fpath, ref_crs, ref_res, ref_dtype, ref_count
+                    )
 
             if i % 10 == 0:
                 print(f"  Scanned {i}/{len(file_paths)} tiles...")
+
+        if ref_res is None or ref_crs is None:
+            raise ValueError("No valid tiles found")
 
         width = int(np.round((max_x - min_x) / ref_res[0]))
         height = int(np.round((max_y - min_y) / abs(ref_res[1])))
 
         transform = Affine(ref_res[0], 0.0, min_x, 0.0, ref_res[1], max_y)
 
-        for tile in self.tiles_info:
-            col_off = int(np.round((tile["bounds"].left - min_x) / ref_res[0]))
-            row_off = int(np.round((max_y - tile["bounds"].top) / abs(ref_res[1])))
-
-            tile["window"] = Window(
-                col_off, row_off, tile["shape"][1], tile["shape"][0]
-            )
+        self._calculate_tile_windows(min_x, max_y, ref_res)
 
         mosaic_meta = {
             "driver": "GTiff",
@@ -154,6 +211,41 @@ class TileMerger:
 
         return mosaic_meta
 
+    def _read_and_resample_tile(self, tile_info: dict) -> np.ndarray:
+        """
+        Read tile data, resampling if needed.
+
+        Args:
+            tile_info: Tile metadata dictionary
+
+        Returns:
+            Numpy array with tile data
+        """
+        from rasterio.enums import Resampling
+
+        if self.ref_res is None:
+            raise ValueError("Reference resolution not set")
+
+        with rasterio.open(tile_info["path"]) as src:
+            if tile_info["needs_resample"]:
+                target_height = int(
+                    np.round(
+                        (src.bounds.top - src.bounds.bottom) / abs(self.ref_res[1])
+                    )
+                )
+                target_width = int(
+                    np.round((src.bounds.right - src.bounds.left) / self.ref_res[0])
+                )
+
+                data = src.read(
+                    out_shape=(src.count, target_height, target_width),
+                    resampling=Resampling.nearest,
+                )
+            else:
+                data = src.read()
+
+        return data
+
     def _merge_last_strategy(self, output_path: str, mosaic_meta: dict):
         """Merge using 'last' strategy: last tile wins."""
         with rasterio.open(output_path, "w", **mosaic_meta) as dst:
@@ -173,11 +265,10 @@ class TileMerger:
                         dst.write(nodata_array, band_idx, window=window)
 
             for i, tile in enumerate(self.tiles_info, 1):
-                with rasterio.open(tile["path"]) as src:
-                    data = src.read()
-                    if self.clip_values is not None:
-                        data = np.clip(data, self.clip_values[0], self.clip_values[1])
-                    dst.write(data, window=tile["window"])
+                data = self._read_and_resample_tile(tile)
+                if self.clip_values is not None:
+                    data = np.clip(data, self.clip_values[0], self.clip_values[1])
+                dst.write(data, window=tile["window"])
                 if i % 5 == 0:
                     print(f"  Merged {i}/{len(self.tiles_info)} tiles...")
 
@@ -206,22 +297,23 @@ class TileMerger:
 
         print("  Pass 1: Accumulating class counts...")
         for i, tile in enumerate(self.tiles_info, 1):
-            with rasterio.open(tile["path"]) as src:
-                data = src.read(1)
-                if self.clip_values is not None:
-                    data = np.clip(data, self.clip_values[0], self.clip_values[1])
+            data = self._read_and_resample_tile(tile)
+            if data.ndim == 3:
+                data = data[0]
+            if self.clip_values is not None:
+                data = np.clip(data, self.clip_values[0], self.clip_values[1])
 
-                win = tile["window"]
-                row_start = win.row_off
-                row_end = row_start + win.height
-                col_start = win.col_off
-                col_end = col_start + win.width
+            win = tile["window"]
+            row_start = win.row_off
+            row_end = row_start + win.height
+            col_start = win.col_off
+            col_end = col_start + win.width
 
-                for class_val in unique_classes:
-                    mask = data == class_val
-                    if self.nodata is not None:
-                        mask = mask & (data != self.nodata)
-                    counts[class_val][row_start:row_end, col_start:col_end] += mask
+            for class_val in unique_classes:
+                mask = data == class_val
+                if self.nodata is not None:
+                    mask = mask & (data != self.nodata)
+                counts[class_val][row_start:row_end, col_start:col_end] += mask
 
             if i % 5 == 0:
                 print(f"    Processed {i}/{len(self.tiles_info)} tiles...")
@@ -418,6 +510,19 @@ def main():
         help="Maximum value to clip output (e.g., 3 for classes {0,1,2,3})",
     )
 
+    parser.add_argument(
+        "--tolerance",
+        type=float,
+        default=1e-3,
+        help="Resolution tolerance for matching tiles (default: 1e-3 = 0.001m)",
+    )
+
+    parser.add_argument(
+        "--resample-mismatch",
+        action="store_true",
+        help="Automatically resample tiles with mismatched resolutions",
+    )
+
     args = parser.parse_args()
 
     file_paths = sorted(glob.glob(args.input + "/*.tif"))
@@ -443,7 +548,11 @@ def main():
             sys.exit(0)
 
     merger = TileMerger(
-        merge_strategy=args.strategy, nodata=args.nodata, clip_values=clip_values
+        merge_strategy=args.strategy,
+        nodata=args.nodata,
+        clip_values=clip_values,
+        resolution_tolerance=args.tolerance,
+        resample_mismatch=args.resample_mismatch,
     )
 
     try:
