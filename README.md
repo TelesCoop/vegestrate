@@ -94,6 +94,7 @@ Cette commande installe le package `vegestrate` et configure correctement tous l
 ```bash
 # Ubuntu/Debian
 sudo apt-get install gdal-bin libgdal-dev
+sudo apt install libpython3.XX-dev python3.XX-dev
 
 # Puis installer les bindings Python avec la version correspondante
 pip install gdal==$(gdal-config --version)
