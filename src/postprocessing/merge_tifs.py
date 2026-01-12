@@ -272,10 +272,8 @@ class TileMerger:
                 if i % 5 == 0:
                     print(f"  Merged {i}/{len(self.tiles_info)} tiles...")
 
-    def _merge_mode_strategy(self, output_path: str, mosaic_meta: dict):
-        """Merge using 'mode' strategy: most frequent class wins."""
-        print("  Using mode strategy - collecting class counts from all tiles...")
-
+    def _detect_unique_classes(self) -> list:
+        """Detect unique classes across all tiles."""
         unique_classes = set()
         for tile in self.tiles_info:
             with rasterio.open(tile["path"]) as src:
@@ -285,45 +283,78 @@ class TileMerger:
         if self.nodata is not None and self.nodata in unique_classes:
             unique_classes.remove(self.nodata)
 
-        unique_classes = sorted(unique_classes)
-        print(f"  Detected classes: {unique_classes}")
+        return sorted(unique_classes)
+
+    def _accumulate_block_counts(
+        self, block_bounds: tuple, unique_classes: list
+    ) -> dict:
+        """Accumulate class counts for a specific block from all overlapping tiles."""
+        row_start, row_end, col_start, col_end = block_bounds
+        block_height = row_end - row_start
+        block_width = col_end - col_start
 
         counts = {
-            class_val: np.zeros(
-                (mosaic_meta["height"], mosaic_meta["width"]), dtype=np.uint8
-            )
-            for class_val in unique_classes
+            c: np.zeros((block_height, block_width), dtype=np.uint16)
+            for c in unique_classes
         }
 
-        print("  Pass 1: Accumulating class counts...")
-        for i, tile in enumerate(self.tiles_info, 1):
+        for tile in self.tiles_info:
+            win = tile["window"]
+            tile_row_start = win.row_off
+            tile_row_end = tile_row_start + win.height
+            tile_col_start = win.col_off
+            tile_col_end = tile_col_start + win.width
+
+            if (
+                tile_row_end <= row_start
+                or tile_row_start >= row_end
+                or tile_col_end <= col_start
+                or tile_col_start >= col_end
+            ):
+                continue
+
+            overlap_row_start = max(row_start, tile_row_start)
+            overlap_row_end = min(row_end, tile_row_end)
+            overlap_col_start = max(col_start, tile_col_start)
+            overlap_col_end = min(col_end, tile_col_end)
+
             data = self._read_and_resample_tile(tile)
             if data.ndim == 3:
                 data = data[0]
             if self.clip_values is not None:
                 data = np.clip(data, self.clip_values[0], self.clip_values[1])
 
-            win = tile["window"]
-            row_start = win.row_off
-            row_end = row_start + win.height
-            col_start = win.col_off
-            col_end = col_start + win.width
+            tile_slice_row = slice(
+                overlap_row_start - tile_row_start, overlap_row_end - tile_row_start
+            )
+            tile_slice_col = slice(
+                overlap_col_start - tile_col_start, overlap_col_end - tile_col_start
+            )
+            block_slice_row = slice(
+                overlap_row_start - row_start, overlap_row_end - row_start
+            )
+            block_slice_col = slice(
+                overlap_col_start - col_start, overlap_col_end - col_start
+            )
+
+            data_slice = data[tile_slice_row, tile_slice_col]
 
             for class_val in unique_classes:
-                mask = data == class_val
+                mask = data_slice == class_val
                 if self.nodata is not None:
-                    mask = mask & (data != self.nodata)
-                counts[class_val][row_start:row_end, col_start:col_end] += mask
+                    mask = mask & (data_slice != self.nodata)
+                counts[class_val][block_slice_row, block_slice_col] += mask
 
-            if i % 5 == 0:
-                print(f"    Processed {i}/{len(self.tiles_info)} tiles...")
+        return counts
 
-        print("  Pass 2: Computing mode for each pixel...")
-
+    def _compute_mode_from_counts(
+        self, counts: dict, unique_classes: list, dtype
+    ) -> np.ndarray:
+        """Compute mode (most frequent class) from count dictionary."""
         count_stack = np.stack([counts[c] for c in unique_classes], axis=2)
         max_indices = np.argmax(count_stack, axis=2)
 
-        class_mapping = np.array(unique_classes, dtype=mosaic_meta["dtype"])
+        class_mapping = np.array(unique_classes, dtype=dtype)
         result = class_mapping[max_indices]
 
         if self.nodata is not None:
@@ -331,9 +362,49 @@ class TileMerger:
             nodata_mask = total_counts == 0
             result[nodata_mask] = self.nodata
 
-        print("  Writing output...")
+        return result
+
+    def _merge_mode_strategy(self, output_path: str, mosaic_meta: dict):
+        """Merge using 'mode' strategy: most frequent class wins."""
+        print("  Using mode strategy - processing block by block...")
+
+        unique_classes = self._detect_unique_classes()
+        print(f"  Detected classes: {unique_classes}")
+
+        block_size = 2048
+        height = mosaic_meta["height"]
+        width = mosaic_meta["width"]
+
+        total_blocks = ((height + block_size - 1) // block_size) * (
+            (width + block_size - 1) // block_size
+        )
+
         with rasterio.open(output_path, "w", **mosaic_meta) as dst:
-            dst.write(result, 1)
+            processed_blocks = 0
+
+            for row_start in range(0, height, block_size):
+                row_end = min(row_start + block_size, height)
+
+                for col_start in range(0, width, block_size):
+                    col_end = min(col_start + block_size, width)
+
+                    block_bounds = (row_start, row_end, col_start, col_end)
+                    counts = self._accumulate_block_counts(block_bounds, unique_classes)
+
+                    result_block = self._compute_mode_from_counts(
+                        counts, unique_classes, mosaic_meta["dtype"]
+                    )
+
+                    block_height = row_end - row_start
+                    block_width = col_end - col_start
+                    window = Window(col_start, row_start, block_width, block_height)
+                    dst.write(result_block, 1, window=window)
+
+                    processed_blocks += 1
+                    if processed_blocks % 10 == 0:
+                        print(
+                            f"    Processed {processed_blocks}/{total_blocks} blocks..."
+                        )
 
     def merge_tiles(self, output_path: str, mosaic_meta: dict):
         """
