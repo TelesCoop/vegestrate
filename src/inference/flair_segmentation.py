@@ -282,6 +282,7 @@ class FlairSegmentation:
         smoothing_sigma: Optional[float] = None,
         use_tta: bool = True,
         tta_modes: Optional[list] = None,
+        class_logit_bias: Optional[dict[int, float]] = None,
     ):
         """Segment a raster image using FLAIR model.
 
@@ -298,6 +299,9 @@ class FlairSegmentation:
             tta_modes: List of augmentation modes to use. Options: 'hflip', 'vflip',
                       'hvflip', 'rot90', 'rot180', 'rot270'.
                       Default: ['hflip', 'vflip', 'hvflip'] for 4x augmentation
+            class_logit_bias: Dict mapping class_id to logit bias to add before argmax.
+                      E.g., {1: 2.0} adds +2.0 to herbaceous logits, shifting decision
+                      boundary to favor class 1. Useful to boost underperforming classes.
 
         Returns:
             Path to output file
@@ -352,7 +356,7 @@ class FlairSegmentation:
                 output_path,
             )
         else:
-            self._save_classmap_output(output, meta, output_path)
+            self._save_classmap_output(output, meta, output_path, class_logit_bias)
 
         return output_path
 
@@ -383,8 +387,18 @@ class FlairSegmentation:
             f"({100 * binary_mask.sum() / binary_mask.size:.2f}%)"
         )
 
-    def _save_classmap_output(self, output_logits, meta, output_path):
+    def _save_classmap_output(
+        self,
+        output_logits,
+        meta,
+        output_path,
+        class_logit_bias: Optional[dict[int, float]] = None,
+    ):
         """Save class map output."""
+        if class_logit_bias:
+            for class_id, bias in class_logit_bias.items():
+                output_logits[:, :, class_id] += bias
+
         class_map = np.argmax(output_logits, axis=2).astype(np.uint8)
 
         if self.num_classes == 19 and self.use_simplified_classes:

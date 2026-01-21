@@ -77,6 +77,7 @@ def process_split(
     grid_step: int,
     use_tta: bool = True,
     tta_modes: Optional[list[str]] = None,
+    class_logit_bias: Optional[dict[int, float]] = None,
 ) -> int:
     """Process all tiles in a split.
 
@@ -92,6 +93,7 @@ def process_split(
         grid_step: Grid step between tiles
         use_tta: Enable TTA (default: True)
         tta_modes: TTA modes (default: None uses model defaults)
+        class_logit_bias: Dict mapping class_id to logit bias (e.g., {1: 2.0})
 
     Returns:
         Number of successfully processed tiles
@@ -128,6 +130,7 @@ def process_split(
             overlap=overlap,
             use_tta=use_tta,
             tta_modes=tta_modes,
+            class_logit_bias=class_logit_bias,
         ):
             processed_count += 1
 
@@ -256,6 +259,7 @@ def process_tile_with_context(
     overlap: int,
     use_tta: bool = True,
     tta_modes: Optional[list[str]] = None,
+    class_logit_bias: Optional[dict[int, float]] = None,
 ) -> bool:
     """Process a single tile with neighboring context.
 
@@ -270,6 +274,7 @@ def process_tile_with_context(
         overlap: Overlap for tiled prediction
         use_tta: Enable TTA (default: True)
         tta_modes: TTA modes (default: None uses model defaults)
+        class_logit_bias: Dict mapping class_id to logit bias (e.g., {1: 2.0})
 
     Returns:
         True if successful, False otherwise
@@ -313,6 +318,7 @@ def process_tile_with_context(
             overlap=overlap,
             use_tta=use_tta,
             tta_modes=tta_modes,
+            class_logit_bias=class_logit_bias,
         )
     finally:
         temp_mosaic_path.unlink(missing_ok=True)
@@ -404,6 +410,13 @@ def main():
         default=None,
         help="TTA augmentation modes (default: hflip vflip hvflip for 4x)",
     )
+    parser.add_argument(
+        "--class_bias",
+        type=str,
+        nargs="+",
+        default=["1:2.0"],
+        help="Class logit bias as CLASS:BIAS pairs (default: 1:2.0 to boost herbaceous)",
+    )
 
     args = parser.parse_args()
 
@@ -426,6 +439,13 @@ def main():
 
     use_tta = not args.no_tta
 
+    class_logit_bias = None
+    if args.class_bias:
+        class_logit_bias = {}
+        for pair in args.class_bias:
+            class_id, bias = pair.split(":")
+            class_logit_bias[int(class_id)] = float(bias)
+
     print("=" * 70)
     print("FLAIR INFERENCE WITH CONTEXT (High Precision Mode)")
     print("=" * 70)
@@ -442,6 +462,11 @@ def main():
         print(f"TTA: ENABLED ({tta_str})")
     else:
         print("TTA: disabled")
+    if class_logit_bias:
+        bias_str = ", ".join(
+            f"class {k}: {v:+.1f}" for k, v in class_logit_bias.items()
+        )
+        print(f"Class logit bias: {bias_str}")
     print(f"Processing splits: {', '.join(args.splits)}")
     print("=" * 70)
 
@@ -477,6 +502,7 @@ def main():
             grid_step=args.grid_step,
             use_tta=use_tta,
             tta_modes=args.tta_modes,
+            class_logit_bias=class_logit_bias,
         )
 
     print("\n" + "=" * 70)

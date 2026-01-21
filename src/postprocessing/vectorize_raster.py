@@ -67,9 +67,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python -m src.postprocessing.vectorize_raster -i final_fused.tif -o final_fused.gpkg
-  python -m src.postprocessing.vectorize_raster -i final_fused.tif -o final_fused.shp -f "ESRI Shapefile"
-  python -m src.postprocessing.vectorize_raster -i final_fused.tif -o final_fused.geojson -f GeoJSON --8connected
+  python -m src/postprocessing/vectorize_raster -i final_fused.tif -o final_fused.gpkg
+  python -m src/postprocessing/vectorize_raster -i final_fused.tif -o final_fused.shp
+  python -m src/postprocessing/vectorize_raster -i final_fused.tif -o final_fused.geojson --8connected
         """,
     )
 
