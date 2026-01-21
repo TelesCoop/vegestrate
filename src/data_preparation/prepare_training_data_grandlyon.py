@@ -199,13 +199,13 @@ def main():
     parser.add_argument(
         "--resolution",
         type=float,
-        default=0.8,
+        default=0.2,
         help="Raster resolution in meters (default: 0.8)",
     )
     parser.add_argument(
         "--workers",
         type=int,
-        default=4,
+        default=14,
         help="Number of parallel workers (default: 4)",
     )
 

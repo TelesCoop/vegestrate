@@ -51,8 +51,8 @@ def build_flair_config(num_classes: int = 19) -> dict:
             },
             "normalization": {
                 "norm_type": "custom",
-                "AERIAL_RGBI_means": [106.59, 105.66, 111.35],
-                "AERIAL_RGBI_stds": [39.78, 52.23, 45.62],
+                "AERIAL_RGBI_means": [105.66, 111.35, 102.18],
+                "AERIAL_RGBI_stds": [52.23, 45.62, 44.30],
             },
         },
         "models": {

@@ -441,13 +441,13 @@ def parse_args():
     parser.add_argument(
         "--tile_size",
         type=int,
-        default=384,
+        default=512,
         help="Tile size for processing mosaic (default: 384, checkpoint native size)",
     )
     parser.add_argument(
         "--overlap",
         type=int,
-        default=192,
+        default=256,
         help="Tile overlap in pixels (default: 192, which is 50% for smooth blending)",
     )
     parser.add_argument(
