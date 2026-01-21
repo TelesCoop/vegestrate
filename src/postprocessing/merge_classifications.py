@@ -28,9 +28,9 @@ def merge_classifications(las_path, flair_path, output_path):
 
     if las_data.shape != flair_data.shape:
         print(
-            f"  Resampling FLAIR from {flair_shape} to {las_data.shape} using bicubic interpolation"
+            f"  Resampling FLAIR from {flair_shape} to {las_data.shape} using nearest neighbor"
         )
-        flair_resampled = np.zeros(las_data.shape, dtype=np.float32)
+        flair_resampled = np.zeros(las_data.shape, dtype=np.uint8)
         reproject(
             source=flair_data,
             destination=flair_resampled,
@@ -38,11 +38,9 @@ def merge_classifications(las_path, flair_path, output_path):
             src_crs=flair_crs,
             dst_transform=las_transform,
             dst_crs=las_crs,
-            resampling=Resampling.cubic,
+            resampling=Resampling.nearest,
         )
-
-        flair_data = np.round(flair_resampled).astype(np.uint8)
-        flair_data = np.clip(flair_data, 0, 3)
+        flair_data = flair_resampled
         print("  Resampling complete")
 
     print(f"\nProcessing: {Path(las_path).name}")
