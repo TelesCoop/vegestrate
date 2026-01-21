@@ -283,6 +283,7 @@ class FlairSegmentation:
         use_tta: bool = True,
         tta_modes: Optional[list] = None,
         class_logit_bias: Optional[dict[int, float]] = None,
+        herbaceous_recovery_margin: Optional[float] = None,
     ):
         """Segment a raster image using FLAIR model.
 
@@ -302,6 +303,11 @@ class FlairSegmentation:
             class_logit_bias: Dict mapping class_id to logit bias to add before argmax.
                       E.g., {1: 2.0} adds +2.0 to herbaceous logits, shifting decision
                       boundary to favor class 1. Useful to boost underperforming classes.
+            herbaceous_recovery_margin: If set, pixels classified as "else" (0) where
+                      herbaceous logit was within this margin of else logit get flipped
+                      to herbaceous. E.g., 2.0 means: if logit_0 - logit_1 < 2.0, use class 1.
+                      This specifically targets else/herbaceous confusion without affecting
+                      other class boundaries.
 
         Returns:
             Path to output file
@@ -356,7 +362,9 @@ class FlairSegmentation:
                 output_path,
             )
         else:
-            self._save_classmap_output(output, meta, output_path, class_logit_bias)
+            self._save_classmap_output(
+                output, meta, output_path, class_logit_bias, herbaceous_recovery_margin
+            )
 
         return output_path
 
@@ -393,6 +401,7 @@ class FlairSegmentation:
         meta,
         output_path,
         class_logit_bias: Optional[dict[int, float]] = None,
+        herbaceous_recovery_margin: Optional[float] = None,
     ):
         """Save class map output."""
         if class_logit_bias:
@@ -400,6 +409,12 @@ class FlairSegmentation:
                 output_logits[:, :, class_id] += bias
 
         class_map = np.argmax(output_logits, axis=2).astype(np.uint8)
+
+        if herbaceous_recovery_margin is not None and herbaceous_recovery_margin > 0:
+            else_pixels = class_map == 0
+            logit_diff = output_logits[:, :, 0] - output_logits[:, :, 1]
+            close_to_herbaceous = logit_diff < herbaceous_recovery_margin
+            class_map[else_pixels & close_to_herbaceous] = 1
 
         if self.num_classes == 19 and self.use_simplified_classes:
             class_map = remap_to_4_classes(class_map)

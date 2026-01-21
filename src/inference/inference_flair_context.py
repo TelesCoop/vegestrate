@@ -78,6 +78,7 @@ def process_split(
     use_tta: bool = True,
     tta_modes: Optional[list[str]] = None,
     class_logit_bias: Optional[dict[int, float]] = None,
+    herbaceous_recovery_margin: Optional[float] = None,
 ) -> int:
     """Process all tiles in a split.
 
@@ -94,6 +95,7 @@ def process_split(
         use_tta: Enable TTA (default: True)
         tta_modes: TTA modes (default: None uses model defaults)
         class_logit_bias: Dict mapping class_id to logit bias (e.g., {1: 2.0})
+        herbaceous_recovery_margin: Margin to recover herbaceous from else (e.g., 3.0)
 
     Returns:
         Number of successfully processed tiles
@@ -121,7 +123,6 @@ def process_split(
 
         if process_tile_with_context(
             tile_id=tile_id,
-            tile_path=ortho_path,
             tile_map=tile_map,
             model=model,
             output_dir=split_dir,
@@ -131,6 +132,7 @@ def process_split(
             use_tta=use_tta,
             tta_modes=tta_modes,
             class_logit_bias=class_logit_bias,
+            herbaceous_recovery_margin=herbaceous_recovery_margin,
         ):
             processed_count += 1
 
@@ -250,7 +252,6 @@ def create_mosaic_from_tiles(
 
 def process_tile_with_context(
     tile_id: str,
-    tile_path: Path,
     tile_map: dict[tuple[int, int], Path],
     model: FlairSegmentation,
     output_dir: Path,
@@ -260,12 +261,12 @@ def process_tile_with_context(
     use_tta: bool = True,
     tta_modes: Optional[list[str]] = None,
     class_logit_bias: Optional[dict[int, float]] = None,
+    herbaceous_recovery_margin: Optional[float] = None,
 ) -> bool:
     """Process a single tile with neighboring context.
 
     Args:
         tile_id: Tile ID (e.g., '18430_51735')
-        tile_path: Path to center tile
         tile_map: Map of all available tiles
         model: FlairSegmentation model
         output_dir: Output directory for predictions
@@ -275,6 +276,7 @@ def process_tile_with_context(
         use_tta: Enable TTA (default: True)
         tta_modes: TTA modes (default: None uses model defaults)
         class_logit_bias: Dict mapping class_id to logit bias (e.g., {1: 2.0})
+        herbaceous_recovery_margin: Margin to recover herbaceous from else
 
     Returns:
         True if successful, False otherwise
@@ -319,6 +321,7 @@ def process_tile_with_context(
             use_tta=use_tta,
             tta_modes=tta_modes,
             class_logit_bias=class_logit_bias,
+            herbaceous_recovery_margin=herbaceous_recovery_margin,
         )
     finally:
         temp_mosaic_path.unlink(missing_ok=True)
@@ -351,7 +354,69 @@ def process_tile_with_context(
     return True
 
 
-def main():
+def parse_class_bias(
+    class_bias_args: Optional[list[str]],
+) -> Optional[dict[int, float]]:
+    if not class_bias_args:
+        return None
+    result = {}
+    for pair in class_bias_args:
+        class_id, bias = pair.split(":")
+        result[int(class_id)] = float(bias)
+    return result
+
+
+def print_config(
+    args, manifest_path, checkpoint_path, output_dir, use_tta, class_logit_bias
+):
+    print("=" * 70)
+    print("FLAIR INFERENCE WITH CONTEXT (High Precision Mode)")
+    print("=" * 70)
+    print(f"Manifest: {manifest_path}")
+    print(f"Checkpoint: {checkpoint_path}")
+    print(f"Output directory: {output_dir}")
+    print(f"Tile size: {args.tile_size}")
+    print(f"Overlap: {args.overlap} ({100 * args.overlap / args.tile_size:.0f}%)")
+    print(f"Grid step: {args.grid_step}")
+    tta_str = ", ".join(args.tta_modes) if args.tta_modes else "hflip, vflip, hvflip"
+    print(f"TTA: {'ENABLED (' + tta_str + ')' if use_tta else 'disabled'}")
+    if class_logit_bias:
+        bias_str = ", ".join(
+            f"class {k}: {v:+.1f}" for k, v in class_logit_bias.items()
+        )
+        print(f"Class logit bias: {bias_str}")
+    if args.herb_margin > 0:
+        print(f"Herbaceous recovery margin: {args.herb_margin}")
+    print(f"Processing splits: {', '.join(args.splits)}")
+    print("=" * 70)
+
+
+def print_tile_map_info(tile_map: dict):
+    print(f"Found {len(tile_map)} tiles in manifest")
+    if tile_map:
+        print(
+            f"X range: {min(c[0] for c in tile_map)} to {max(c[0] for c in tile_map)}"
+        )
+        print(
+            f"Y range: {min(c[1] for c in tile_map)} to {max(c[1] for c in tile_map)}"
+        )
+
+
+def print_summary(total_processed: int, output_dir: Path, splits: list[str]):
+    print("\n" + "=" * 70)
+    print("PROCESSING COMPLETE")
+    print("=" * 70)
+    print(f"Total images processed: {total_processed}")
+    print(f"Predictions saved to: {output_dir}")
+    print("\nOutput structure:")
+    for split in splits:
+        split_dir = output_dir / split
+        if split_dir.exists():
+            predictions = list(split_dir.glob("prediction_*.tif"))
+            print(f"  {split}/: {len(predictions)} predictions")
+
+
+def parse_args():
     parser = argparse.ArgumentParser(
         description="FLAIR inference with neighboring tile context"
     )
@@ -414,11 +479,21 @@ def main():
         "--class_bias",
         type=str,
         nargs="+",
-        default=["1:2.0"],
-        help="Class logit bias as CLASS:BIAS pairs (default: 1:2.0 to boost herbaceous)",
+        default=None,
+        help="Class logit bias as CLASS:BIAS pairs (ex: 1:2.0 to boost herbaceous)",
     )
+    parser.add_argument(
+        "--herb_margin",
+        type=float,
+        default=3.0,
+        help="Herbaceous recovery margin: pixels classified as 'else' where herbaceous "
+        "logit was within this margin get flipped to herbaceous (default: 3.0)",
+    )
+    return parser.parse_args()
 
-    args = parser.parse_args()
+
+def main():
+    args = parse_args()
 
     manifest_path = Path(args.manifest)
     output_dir = Path(args.output_dir)
@@ -434,53 +509,18 @@ def main():
 
     manifest = load_manifest(str(manifest_path))
     data_dir = manifest_path.parent
-
     output_dir.mkdir(parents=True, exist_ok=True)
 
     use_tta = not args.no_tta
+    class_logit_bias = parse_class_bias(args.class_bias)
 
-    class_logit_bias = None
-    if args.class_bias:
-        class_logit_bias = {}
-        for pair in args.class_bias:
-            class_id, bias = pair.split(":")
-            class_logit_bias[int(class_id)] = float(bias)
-
-    print("=" * 70)
-    print("FLAIR INFERENCE WITH CONTEXT (High Precision Mode)")
-    print("=" * 70)
-    print(f"Manifest: {manifest_path}")
-    print(f"Checkpoint: {checkpoint_path}")
-    print(f"Output directory: {output_dir}")
-    print(f"Tile size: {args.tile_size}")
-    print(f"Overlap: {args.overlap} ({100 * args.overlap / args.tile_size:.0f}%)")
-    print(f"Grid step: {args.grid_step}")
-    if use_tta:
-        tta_str = (
-            ", ".join(args.tta_modes) if args.tta_modes else "hflip, vflip, hvflip"
-        )
-        print(f"TTA: ENABLED ({tta_str})")
-    else:
-        print("TTA: disabled")
-    if class_logit_bias:
-        bias_str = ", ".join(
-            f"class {k}: {v:+.1f}" for k, v in class_logit_bias.items()
-        )
-        print(f"Class logit bias: {bias_str}")
-    print(f"Processing splits: {', '.join(args.splits)}")
-    print("=" * 70)
+    print_config(
+        args, manifest_path, checkpoint_path, output_dir, use_tta, class_logit_bias
+    )
 
     print("\nBuilding tile map from manifest...")
     tile_map = build_tile_map_from_manifest(manifest, data_dir)
-
-    print(f"Found {len(tile_map)} tiles in manifest")
-    if tile_map:
-        print(
-            f"X range: {min(c[0] for c in tile_map)} to {max(c[0] for c in tile_map)}"
-        )
-        print(
-            f"Y range: {min(c[1] for c in tile_map)} to {max(c[1] for c in tile_map)}"
-        )
+    print_tile_map_info(tile_map)
 
     model = initialize_model(checkpoint_path)
 
@@ -503,19 +543,10 @@ def main():
             use_tta=use_tta,
             tta_modes=args.tta_modes,
             class_logit_bias=class_logit_bias,
+            herbaceous_recovery_margin=args.herb_margin,
         )
 
-    print("\n" + "=" * 70)
-    print("PROCESSING COMPLETE")
-    print("=" * 70)
-    print(f"Total images processed: {total_processed}")
-    print(f"Predictions saved to: {output_dir}")
-    print("\nOutput structure:")
-    for split in args.splits:
-        split_dir = output_dir / split
-        if split_dir.exists():
-            predictions = list(split_dir.glob("prediction_*.tif"))
-            print(f"  {split}/: {len(predictions)} predictions")
+    print_summary(total_processed, output_dir, args.splits)
 
 
 if __name__ == "__main__":
