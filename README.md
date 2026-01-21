@@ -1,6 +1,7 @@
 # 🌳 Inventaire stratifié du végétal
 
 Vous trouverez dans ce repos un wrapper pour [FLAIR-HUB](https://github.com/IGNF/FLAIR-HUB) pour faire de l'inférence directement et des fonctions pour faire du fine-tunning. Les poids de FLAIR-HUB sont sur [HuggingFace](https://huggingface.co/IGNF/FLAIR-HUB_LC-A_RGB_swinlarge-upernet).
+Si vous réutilisez les poids ou le modèle FLAIR-HUB, un like sur [GitHub](https://github.com/IGNF/FLAIR-HUB)/[Hugging Face](https://huggingface.co/IGNF/FLAIR-HUB_LC-A_RGB_swinlarge-upernet) leur permet de valoriser leurs travaux, en interne comme en externe !
 
 Ce travail a été réalisé dans le cadre du projet [IA.rbre](https://iarbre.fr) et vous pouvez trouver les autres calque sur notre plateforme [carte.iarbre.fr](https://carte.iarbre.fr).
 
@@ -12,6 +13,7 @@ Ce travail a été réalisé dans le cadre du projet [IA.rbre](https://iarbre.fr
 - [📦 Installation](#-installation)
 - [🛠️ Configuration de Pre-Commit](#️-configuration-de-pre-commit)
 - [🤝 Contribution](#-contribution)
+- [📜 Datapaper](#datapaper-flairhub)
 
 ---
 
@@ -196,3 +198,24 @@ Vous pouvez également contribuer directement en proposant de nouvelles fonction
 3. **Valider vos modifications** : `git commit -m "Ajouter une fonctionnalité géniale"`
 4. **Pousser votre branche** : `git push origin ma-fonctionnalite-geniale`
 5. **Ouvrir une Pull Request**
+
+## Datapaper FlairHub
+
+Nous n'avons pas utilisé le dataset FLAIR-HUB mais le modèle que nous utilisons a été entraîné dessus.
+
+```bibtex
+@article{ign2025flairhub,
+  doi = {10.48550/arXiv.2506.07080},
+  url = {https://arxiv.org/abs/2506.07080},
+  author = {Garioud, Anatol and Giordano, Sébastien and David, Nicolas and Gonthier, Nicolas},
+  title = {FLAIR-HUB: Large-scale Multimodal Dataset for Land Cover and Crop Mapping},
+  publisher = {arXiv},
+  year = {2025}
+}
+```
+
+```
+Anatol Garioud, Sébastien Giordano, Nicolas David, Nicolas Gonthier.
+FLAIR-HUB: Large-scale Multimodal Dataset for Land Cover and Crop Mapping. (2025).
+DOI: https://doi.org/10.48550/arXiv.2506.07080
+```

@@ -16,7 +16,7 @@ def main():
             all_tiles.append(
                 {
                     "tile_id": tile_id,
-                    "orthophoto": f"test/{tile_id}_orthophoto.tif",
+                    "orthophoto": f"test/orthophoto_{tile_id}.tif",
                     "classification_map": f"test/{tile_id}_classification_map.tif",
                     "url": url,
                 }
