@@ -21,6 +21,7 @@ Usage:
 
 import argparse
 import time
+from functools import partial
 from pathlib import Path
 
 import laspy
@@ -147,42 +148,21 @@ def download_orthophoto(tile_name, output_dir, resolution=0.8):
     return ortho_path
 
 
-def process_tile_wrapper(resolution):
-    """Create a process_tile function with fixed resolution.
+def process_tile(resolution, entry, output_dir):
+    url = entry["url"]
+    tile_id = entry["tile_id"]
 
-    Args:
-        resolution: Raster resolution in meters
+    try:
+        tile_name = extract_tile_name(url)
 
-    Returns:
-        Function that processes a single tile
-    """
+        download_and_process_lidar(url, output_dir, resolution)
+        download_orthophoto(tile_name, output_dir, resolution)
 
-    def process_tile(entry, output_dir):
-        """Process a single tile (download LiDAR, create classification map, download orthophoto).
+        return {"tile_id": tile_id, "status": "success"}
 
-        Args:
-            entry: Manifest entry with 'url' and 'tile_id'
-            output_dir: Directory to save outputs
-
-        Returns:
-            Dictionary with tile_id and status
-        """
-        url = entry["url"]
-        tile_id = entry["tile_id"]
-
-        try:
-            tile_name = extract_tile_name(url)
-
-            download_and_process_lidar(url, output_dir, resolution)
-            download_orthophoto(tile_name, output_dir, resolution)
-
-            return {"tile_id": tile_id, "status": "success"}
-
-        except Exception as e:
-            print(f"\n✗ Error processing {tile_id}: {e}")
-            return {"tile_id": tile_id, "status": "failed", "error": str(e)}
-
-    return process_tile
+    except Exception as e:
+        print(f"\n✗ Error processing {tile_id}: {e}")
+        return {"tile_id": tile_id, "status": "failed", "error": str(e)}
 
 
 def main():
@@ -236,7 +216,7 @@ def main():
     print(f"  Training: {len(manifest['train'])} tiles")
     print(f"  Testing: {len(manifest['test'])} tiles")
 
-    process_func = process_tile_wrapper(args.resolution)
+    process_func = partial(process_tile, args.resolution)
     successes, failures = process_tiles_parallel(
         all_tiles, process_func, max_workers=args.workers
     )
