@@ -1,4 +1,4 @@
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Callable
 
 import humanize
@@ -10,7 +10,7 @@ def process_tiles_parallel(
     max_workers: int = 4,
     verbose: bool = True,
 ) -> tuple[list[dict], list[dict]]:
-    """Process tiles in parallel using ThreadPoolExecutor.
+    """Process tiles in parallel using ProcessPoolExecutor.
 
     Args:
         all_tiles: List of tuples (entry, output_dir, split_name)
@@ -27,7 +27,7 @@ def process_tiles_parallel(
         print(f"\nProcessing {total_tiles} tiles with {max_workers} workers...")
 
     results = []
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
         future_to_tile = {
             executor.submit(process_func, entry, output_dir): (entry["tile_id"], split)
             for entry, output_dir, split in all_tiles

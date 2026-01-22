@@ -1,5 +1,3 @@
-from collections import defaultdict
-
 import numpy as np
 import rasterio
 import requests
@@ -59,16 +57,8 @@ def classification_to_raster(filtered_las, las, cell_size=0.2):
     y_coords = las.y
 
     x_coords_filt = filtered_las.x
-    y_coord_filt = filtered_las.y
-    classifications = filtered_las.classification
-
-    las_to_simplified = {
-        2: 0,
-        3: 1,
-        4: 2,
-        5: 3,
-        8: 3,
-    }
+    y_coords_filt = filtered_las.y
+    classifications = np.asarray(filtered_las.classification)
 
     x_min, x_max = x_coords.min(), x_coords.max()
     y_min, y_max = y_coords.min(), y_coords.max()
@@ -76,26 +66,26 @@ def classification_to_raster(filtered_las, las, cell_size=0.2):
     cols = int(np.ceil((x_max - x_min) / cell_size))
     rows = int(np.ceil((y_max - y_min) / cell_size))
 
-    raster = np.full((rows, cols), 0, dtype=np.uint8)
-
-    col_indices = ((x_coords_filt - x_min) / cell_size).astype(int)
-    row_indices = ((y_max - y_coord_filt) / cell_size).astype(int)
+    col_indices = ((x_coords_filt - x_min) / cell_size).astype(np.int32)
+    row_indices = ((y_max - y_coords_filt) / cell_size).astype(np.int32)
 
     col_indices = np.clip(col_indices, 0, cols - 1)
     row_indices = np.clip(row_indices, 0, rows - 1)
 
-    cell_points = defaultdict(list)
+    las_to_simplified_lut = np.zeros(256, dtype=np.uint8)
+    las_to_simplified_lut[2] = 0
+    las_to_simplified_lut[3] = 1
+    las_to_simplified_lut[4] = 2
+    las_to_simplified_lut[5] = 3
+    las_to_simplified_lut[8] = 3
 
-    for point_idx in range(len(filtered_las)):
-        i = row_indices[point_idx]
-        j = col_indices[point_idx]
-        original_class = classifications[point_idx]
-        simplified = las_to_simplified.get(int(original_class), 0)
-        cell_points[(i, j)].append(simplified)
+    simplified_classes = las_to_simplified_lut[classifications]
 
-    for (i, j), class_values in cell_points.items():
-        unique, counts = np.unique(class_values, return_counts=True)
-        raster[i, j] = unique[np.argmax(counts)]
+    num_classes = 4
+    counts = np.zeros((num_classes, rows, cols), dtype=np.int32)
+    np.add.at(counts, (simplified_classes, row_indices, col_indices), 1)
+
+    raster = np.argmax(counts, axis=0).astype(np.uint8)
 
     affine_transform = transform.from_bounds(x_min, y_min, x_max, y_max, cols, rows)
 
