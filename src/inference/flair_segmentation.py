@@ -266,7 +266,10 @@ class FlairSegmentation:
         else:
             for c in range(self.num_classes):
                 output_logits[:, :, c] = np.divide(
-                    output_logits[:, :, c], weight_map, where=weight_map > 0
+                    output_logits[:, :, c],
+                    weight_map,
+                    out=output_logits[:, :, c],
+                    where=weight_map > 0,
                 )
             return output_logits
 
