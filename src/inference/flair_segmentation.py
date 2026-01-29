@@ -335,7 +335,7 @@ class FlairSegmentation:
             if tta_modes is None:
                 tta_modes = ["hflip", "vflip", "hvflip"]
             aug_modes = ["original"] + tta_modes
-            outputs = []
+            output = None
 
             for i, mode in enumerate(aug_modes, 1):
                 aug_image = self._augment_image(image_data, mode)
@@ -352,9 +352,13 @@ class FlairSegmentation:
                 aug_output = self._deaugment_output(
                     aug_output, mode, is_probs=(class_id is not None)
                 )
-                outputs.append(aug_output)
 
-            output = np.mean(outputs, axis=0).astype(np.float32)
+                if output is None:
+                    output = aug_output.astype(np.float32)
+                else:
+                    output += aug_output
+
+            output /= len(aug_modes)
 
         if class_id is not None:
             self._save_binary_output(
