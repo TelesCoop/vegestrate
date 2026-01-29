@@ -66,14 +66,14 @@ def get_orthophoto_url(tile_name):
     return f"{base_url}/{tile_name}_5cm_CC46.tif"
 
 
-def download_and_process_lidar(url, output_dir, resolution=0.8):
+def download_and_process_lidar(url, output_dir, resolution=0.2):
     """
     Download LiDAR data and create classification map
 
     Args:
         url: LiDAR download URL
         output_dir: Directory to save outputs
-        resolution: Raster cell size in meters (default: 0.8)
+        resolution: Raster cell size in meters (default: 0.2)
 
     Returns:
         Path to classification_map.tif
@@ -106,14 +106,14 @@ def download_and_process_lidar(url, output_dir, resolution=0.8):
     return classmap_path
 
 
-def download_orthophoto(tile_name, output_dir, resolution=0.8):
+def download_orthophoto(tile_name, output_dir, resolution=0.2):
     """
     Download orthophoto directly from GrandLyon and resize to match classification map
 
     Args:
         tile_name: Tile identifier (e.g., "18435_51770")
         output_dir: Directory to save orthophoto
-        resolution: Target resolution in meters (default: 0.8)
+        resolution: Target resolution in meters (default: 0.2)
 
     Returns:
         Path to orthophoto.tif
@@ -180,13 +180,13 @@ def main():
         "--resolution",
         type=float,
         default=0.2,
-        help="Raster resolution in meters (default: 0.8)",
+        help="Raster resolution in meters (default: 0.2)",
     )
     parser.add_argument(
         "--workers",
         type=int,
         default=14,
-        help="Number of parallel workers (default: 4)",
+        help="Number of parallel workers (default: 14)",
     )
 
     args = parser.parse_args()

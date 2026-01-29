@@ -19,7 +19,6 @@ def resize_and_save(raster_path, resolution, bounds, crs, output_path):
     new_width = int((bounds.right - bounds.left) / target_pixel_size)
     new_height = int((bounds.top - bounds.bottom) / target_pixel_size)
 
-    print("\nResizing to 0.8m resolution:")
     print(f"  Target size: {new_width}x{new_height}")
 
     img_resized = img.resize((new_width, new_height), Image.BICUBIC)

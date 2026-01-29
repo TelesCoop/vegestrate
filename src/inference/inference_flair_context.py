@@ -196,58 +196,55 @@ def find_tile_neighbors(
 
 
 def create_mosaic_from_tiles(
-    neighbors: dict[str, Optional[Path]], tile_size: int = 625
-) -> tuple[Optional[np.ndarray], Optional[dict]]:
+    neighbors: dict[str, Optional[Path]],
+) -> tuple[Optional[np.ndarray], Optional[dict], Optional[int]]:
     """Create 3x3 mosaic from neighboring tiles.
 
     Args:
         neighbors: Dictionary from find_tile_neighbors()
-        tile_size: Size of each tile (default: 625)
 
     Returns:
-        Tuple of (mosaic_array, metadata) or (None, None) if center missing
+        Tuple of (mosaic_array, metadata, tile_size) or (None, None, None) if center missing
     """
     if neighbors["C"] is None:
-        return None, None
+        return None, None, None
 
-    mosaic_size = tile_size * 3
+    with rasterio.open(neighbors["C"]) as src:
+        data_tile_size = src.height
+        center_meta = {
+            "crs": src.crs,
+            "transform": src.transform,
+            "bounds": src.bounds,
+        }
+
+    mosaic_size = data_tile_size * 3
     mosaic = np.zeros((mosaic_size, mosaic_size, 3), dtype=np.uint8)
 
-    # Grid layout positions
     layout = [
         ["NW", "N", "NE"],
         ["W", "C", "E"],
         ["SW", "S", "SE"],
     ]
 
-    center_meta = None
-
     for row_idx, row in enumerate(layout):
         for col_idx, pos in enumerate(row):
             tile_path = neighbors[pos]
 
             if tile_path is None or not tile_path.exists():
-                # Leave as zeros (black) for missing tiles
                 continue
 
             with rasterio.open(tile_path) as src:
-                if pos == "C":
-                    center_meta = {
-                        "crs": src.crs,
-                        "transform": src.transform,
-                        "bounds": src.bounds,
-                    }
-
                 img = src.read([1, 2, 3])
                 img = np.transpose(img, (1, 2, 0))
 
-                y_start = row_idx * tile_size
-                x_start = col_idx * tile_size
-                mosaic[y_start : y_start + tile_size, x_start : x_start + tile_size] = (
-                    img
-                )
+                y_start = row_idx * data_tile_size
+                x_start = col_idx * data_tile_size
+                mosaic[
+                    y_start : y_start + data_tile_size,
+                    x_start : x_start + data_tile_size,
+                ] = img
 
-    return mosaic, center_meta
+    return mosaic, center_meta, data_tile_size
 
 
 def process_tile_with_context(
@@ -288,8 +285,8 @@ def process_tile_with_context(
 
     neighbors = find_tile_neighbors(coords, tile_map, grid_step)
 
-    mosaic, center_meta = create_mosaic_from_tiles(neighbors, tile_size=625)
-    if mosaic is None or center_meta is None:
+    mosaic, center_meta, data_tile_size = create_mosaic_from_tiles(neighbors)
+    if mosaic is None or center_meta is None or data_tile_size is None:
         print("  ✗ Failed to create mosaic")
         return False
 
@@ -327,8 +324,12 @@ def process_tile_with_context(
         temp_mosaic_path.unlink(missing_ok=True)
 
     with rasterio.open(temp_pred_path) as src:
-        # Center tile starts at (625, 625) and goes to (1250, 1250)
-        center_data = src.read(1, window=Window(625, 625, 625, 625))
+        center_data = src.read(
+            1,
+            window=Window(
+                data_tile_size, data_tile_size, data_tile_size, data_tile_size
+            ),
+        )
 
     output_path = output_dir / f"prediction_{coords[0]}_{coords[1]}.tif"
 
@@ -336,8 +337,8 @@ def process_tile_with_context(
         output_path,
         "w",
         driver="GTiff",
-        height=625,
-        width=625,
+        height=data_tile_size,
+        width=data_tile_size,
         count=1,
         dtype=center_data.dtype,
         crs=center_meta["crs"],
