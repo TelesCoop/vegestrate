@@ -44,7 +44,7 @@ def vectorize_raster(
         srs = osr.SpatialReference()
         srs.ImportFromWkt(src_ds.GetProjection())
 
-    dst_layer = dst_ds.CreateLayer("vegetation", srs=srs)
+    dst_layer = dst_ds.CreateLayer("vegetation", srs=srs, geom_type=ogr.wkbPolygon)
     field_defn = ogr.FieldDefn(field_name, ogr.OFTInteger)
     dst_layer.CreateField(field_defn)
 
