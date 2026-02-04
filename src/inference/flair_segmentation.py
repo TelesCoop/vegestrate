@@ -335,6 +335,90 @@ class FlairSegmentation:
             return output_logits
 
     @torch.no_grad()
+    def segment_array(
+        self,
+        image_data: np.ndarray,
+        tile_size: int = 512,
+        overlap: int = 32,
+        use_tta: bool = True,
+        tta_modes: Optional[list] = None,
+        class_id: Optional[int] = None,
+        class_logit_bias: Optional[dict[int, float]] = None,
+        herbaceous_recovery_margin: Optional[float] = None,
+    ) -> np.ndarray:
+        """Segment an image array directly (no file I/O).
+
+        Args:
+            image_data: Image array (H, W, 3) uint8
+            tile_size: Size of tiles for processing
+            overlap: Overlap between tiles in pixels
+            use_tta: Enable Test-Time Augmentation
+            tta_modes: TTA modes to use
+            class_id: Class ID for binary mode, None for class map
+            class_logit_bias: Dict mapping class_id to logit bias
+            herbaceous_recovery_margin: Margin to recover herbaceous from else
+
+        Returns:
+            Class map (H, W) uint8
+        """
+        if use_tta and tta_modes is None:
+            tta_modes = ["hflip", "vflip", "hvflip"]
+
+        self._load_model(tile_size)
+        height, width = image_data.shape[:2]
+
+        if not use_tta:
+            output = self._segment_single_pass(
+                image_data, height, width, tile_size, overlap, class_id
+            )
+        else:
+            aug_modes = ["original"] + tta_modes
+            output = None
+
+            for mode in aug_modes:
+                aug_image = self._augment_image(image_data, mode)
+
+                if mode in ["rot90", "rot270"]:
+                    aug_height, aug_width = aug_image.shape[:2]
+                else:
+                    aug_height, aug_width = height, width
+
+                aug_output = self._segment_single_pass(
+                    aug_image, aug_height, aug_width, tile_size, overlap, class_id
+                )
+
+                aug_output = self._deaugment_output(
+                    aug_output, mode, is_probs=(class_id is not None)
+                )
+
+                if output is None:
+                    output = aug_output.astype(np.float32)
+                else:
+                    output += aug_output
+
+            output /= len(aug_modes)
+
+        if class_id is not None:
+            return (output >= 0.5).astype(np.uint8)
+
+        if class_logit_bias:
+            for cid, bias in class_logit_bias.items():
+                output[:, :, cid] += bias
+
+        class_map = np.argmax(output, axis=2).astype(np.uint8)
+
+        if herbaceous_recovery_margin is not None and herbaceous_recovery_margin > 0:
+            else_pixels = class_map == 0
+            logit_diff = output[:, :, 0] - output[:, :, 1]
+            close_to_herbaceous = logit_diff < herbaceous_recovery_margin
+            class_map[else_pixels & close_to_herbaceous] = 1
+
+        if self.num_classes == 19 and self.use_simplified_classes:
+            class_map = remap_to_4_classes(class_map)
+
+        return class_map
+
+    @torch.no_grad()
     def segment_image(
         self,
         image_path: str,

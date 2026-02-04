@@ -5,7 +5,6 @@ from typing import Optional
 
 import numpy as np
 import rasterio
-from rasterio.windows import Window
 
 from src.core import load_manifest
 from src.inference.flair_segmentation import FlairSegmentation
@@ -297,46 +296,21 @@ def process_tile_with_context(
         print("  ✗ Failed to create mosaic")
         return False
 
-    temp_mosaic_path = output_dir / f"temp_mosaic_{coords[0]}_{coords[1]}.tif"
+    class_map = model.segment_array(
+        image_data=mosaic,
+        tile_size=tile_size,
+        overlap=overlap,
+        use_tta=use_tta,
+        tta_modes=tta_modes,
+        class_id=None,
+        class_logit_bias=class_logit_bias,
+        herbaceous_recovery_margin=herbaceous_recovery_margin,
+    )
 
-    with rasterio.open(
-        temp_mosaic_path,
-        "w",
-        driver="GTiff",
-        height=mosaic.shape[0],
-        width=mosaic.shape[1],
-        count=3,
-        dtype=mosaic.dtype,
-        crs=center_meta["crs"],
-        transform=center_meta["transform"],
-    ) as dst:
-        for i in range(3):
-            dst.write(mosaic[:, :, i], i + 1)
-
-    temp_pred_path = output_dir / f"temp_pred_{coords[0]}_{coords[1]}.tif"
-
-    try:
-        model.segment_image(
-            image_path=str(temp_mosaic_path),
-            output_path=str(temp_pred_path),
-            class_id=None,
-            tile_size=tile_size,
-            overlap=overlap,
-            use_tta=use_tta,
-            tta_modes=tta_modes,
-            class_logit_bias=class_logit_bias,
-            herbaceous_recovery_margin=herbaceous_recovery_margin,
-        )
-    finally:
-        temp_mosaic_path.unlink(missing_ok=True)
-
-    with rasterio.open(temp_pred_path) as src:
-        center_data = src.read(
-            1,
-            window=Window(
-                data_tile_size, data_tile_size, data_tile_size, data_tile_size
-            ),
-        )
+    center_data = class_map[
+        data_tile_size : 2 * data_tile_size,
+        data_tile_size : 2 * data_tile_size,
+    ]
 
     with rasterio.open(
         output_path,
@@ -352,9 +326,6 @@ def process_tile_with_context(
         compress="lzw",
     ) as dst:
         dst.write(center_data, 1)
-
-    # Clean up temp prediction
-    temp_pred_path.unlink(missing_ok=True)
 
     print(f"  ✓ Saved to {output_path}")
     return True
