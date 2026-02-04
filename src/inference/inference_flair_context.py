@@ -40,11 +40,12 @@ def build_tile_map_from_manifest(
     return tile_map
 
 
-def initialize_model(checkpoint_path: Path) -> FlairSegmentation:
+def initialize_model(checkpoint_path: Path, batch_size: int = 8) -> FlairSegmentation:
     """Initialize FLAIR segmentation model.
 
     Args:
         checkpoint_path: Path to checkpoint file
+        batch_size: Number of tiles to process simultaneously
 
     Returns:
         Initialized FlairSegmentation model
@@ -56,6 +57,7 @@ def initialize_model(checkpoint_path: Path) -> FlairSegmentation:
         checkpoint_path=str(checkpoint_path),
         use_simplified_classes=True,
         checkpoint_num_classes=checkpoint_num_classes,
+        batch_size=batch_size,
     )
 
     print("\nAvailable classes (4 simplified classes):")
@@ -379,6 +381,7 @@ def print_config(
     print(f"Tile size: {args.tile_size}")
     print(f"Overlap: {args.overlap} ({100 * args.overlap / args.tile_size:.0f}%)")
     print(f"Grid step: {args.grid_step}")
+    print(f"Batch size: {args.batch_size}")
     tta_str = ", ".join(args.tta_modes) if args.tta_modes else "hflip, vflip, hvflip"
     print(f"TTA: {'ENABLED (' + tta_str + ')' if use_tta else 'disabled'}")
     if class_logit_bias:
@@ -465,12 +468,12 @@ def parse_args():
         help="Splits to process (default: train test)",
     )
     parser.add_argument(
-        "--no_tta",
+        "--no-tta",
         action="store_true",
         help="Disable Test-Time Augmentation (enabled by default for better precision)",
     )
     parser.add_argument(
-        "--tta_modes",
+        "--tta-modes",
         type=str,
         nargs="+",
         default=None,
@@ -489,6 +492,12 @@ def parse_args():
         default=3.0,
         help="Herbaceous recovery margin: pixels classified as 'else' where herbaceous "
         "logit was within this margin get flipped to herbaceous (default: 3.0)",
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=16,
+        help="Number of tiles to process simultaneously (default: 16).",
     )
     return parser.parse_args()
 
@@ -523,7 +532,7 @@ def main():
     tile_map = build_tile_map_from_manifest(manifest, data_dir)
     print_tile_map_info(tile_map)
 
-    model = initialize_model(checkpoint_path)
+    model = initialize_model(checkpoint_path, batch_size=args.batch_size)
 
     total_processed = 0
     for split in args.splits:

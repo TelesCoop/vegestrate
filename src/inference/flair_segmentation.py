@@ -25,6 +25,7 @@ class FlairSegmentation:
         device: Optional[str] = None,
         use_simplified_classes: bool = True,
         checkpoint_num_classes: Optional[int] = None,
+        batch_size: int = 8,
     ):
         """
         Initialize FLAIR segmentation model.
@@ -35,9 +36,11 @@ class FlairSegmentation:
             use_simplified_classes: If True, expect/use 4 classes (default: True)
             checkpoint_num_classes: Number of classes in checkpoint (auto-detect if None)
                                     Use 4 for fine-tuned, 19 for pretrained
+            batch_size: Number of tiles to process simultaneously (default: 8)
         """
         self.checkpoint_path = Path(checkpoint_path)
         self.use_simplified_classes = use_simplified_classes
+        self.batch_size = batch_size
 
         if device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -52,12 +55,12 @@ class FlairSegmentation:
         if checkpoint_num_classes is not None:
             self.num_classes = checkpoint_num_classes
         else:
-            # Default: 4 for simplified, 19 for full
             self.num_classes = 4 if self.use_simplified_classes else 19
 
         print("FlairSegmentation initialized")
         print(f"Checkpoint: {self.checkpoint_path}")
         print(f"Model classes: {self.num_classes}")
+        print(f"Batch size: {self.batch_size}")
         if self.use_simplified_classes:
             print("Mode: 4 simplified classes (else, herbaceous, hedge, trees)")
         else:
@@ -205,6 +208,51 @@ class FlairSegmentation:
         else:
             raise ValueError(f"Unknown augmentation mode: {mode}")
 
+    def _process_batch(
+        self,
+        batch_images: list[np.ndarray],
+        tile_size: int,
+    ) -> np.ndarray:
+        """Process a batch of tiles through the model.
+
+        Args:
+            batch_images: List of tile images (H, W, C)
+            tile_size: Expected tile size
+
+        Returns:
+            Batch of logits (B, num_classes, H, W)
+        """
+        batch_tensors = []
+        for tile_image in batch_images:
+            tile_tensor = FlairInference.preprocess_tile(tile_image, normalize=True)
+            batch_tensors.append(tile_tensor)
+
+        batch_tensor = torch.cat(batch_tensors, dim=0).to(self.device)
+        batch_size = batch_tensor.shape[0]
+
+        batch = {
+            "AERIAL_LABEL-COSIA": torch.zeros(batch_size, tile_size, tile_size).to(
+                self.device
+            ),
+            "AERIAL_RGBI": batch_tensor,
+        }
+
+        if self.model is None:
+            raise RuntimeError("Model not loaded")
+
+        logits_tasks, _ = self.model(batch)
+        logits = logits_tasks["AERIAL_LABEL-COSIA"]
+
+        if logits.shape[2:] != (tile_size, tile_size):
+            logits = F.interpolate(
+                logits,
+                size=(tile_size, tile_size),
+                mode="bilinear",
+                align_corners=False,
+            )
+
+        return logits.cpu().numpy()
+
     def _segment_single_pass(
         self,
         image_data: np.ndarray,
@@ -214,7 +262,7 @@ class FlairSegmentation:
         overlap: int,
         class_id: Optional[int],
     ) -> np.ndarray:
-        """Run single segmentation pass on image.
+        """Run single segmentation pass on image with batched inference.
 
         Args:
             image_data: Image array (H, W, C)
@@ -238,28 +286,41 @@ class FlairSegmentation:
 
         tiles = FlairInference.create_tiles_grid(height, width, tile_size, overlap)
 
+        valid_tiles = []
+        valid_infos = []
         for tile_info in tiles:
             y, x = tile_info["y"], tile_info["x"]
             h, w = tile_info["h"], tile_info["w"]
-
             tile_image = image_data[y : y + h, x : x + w, :].copy()
-            if tile_image.max() < 10:
-                continue
+            if tile_image.max() >= 10:
+                valid_tiles.append(tile_image)
+                valid_infos.append(tile_info)
 
-            result = self._process_tile(tile_image, h, w, class_id)
-            tile_weight = create_weight_map(h, w, overlap)
+        for batch_start in range(0, len(valid_tiles), self.batch_size):
+            batch_end = min(batch_start + self.batch_size, len(valid_tiles))
+            batch_images = valid_tiles[batch_start:batch_end]
+            batch_infos = valid_infos[batch_start:batch_end]
 
-            if class_id is not None:
-                output_probs[y : y + h, x : x + w] += result * tile_weight
-            else:
-                for c in range(self.num_classes):
-                    output_logits[y : y + h, x : x + w, c] += (
-                        result[c, :, :] * tile_weight
-                    )
+            batch_logits = self._process_batch(batch_images, tile_size)
 
-            weight_map[y : y + h, x : x + w] += tile_weight
+            for i, tile_info in enumerate(batch_infos):
+                y, x = tile_info["y"], tile_info["x"]
+                h, w = tile_info["h"], tile_info["w"]
 
-        # Normalize by weight
+                tile_logits = batch_logits[i]
+                tile_weight = create_weight_map(h, w, overlap)
+
+                if class_id is not None:
+                    probs = np.exp(tile_logits) / np.exp(tile_logits).sum(axis=0)
+                    output_probs[y : y + h, x : x + w] += probs[class_id] * tile_weight
+                else:
+                    for c in range(self.num_classes):
+                        output_logits[y : y + h, x : x + w, c] += (
+                            tile_logits[c, :h, :w] * tile_weight
+                        )
+
+                weight_map[y : y + h, x : x + w] += tile_weight
+
         if class_id is not None:
             output_probs = np.divide(output_probs, weight_map, where=weight_map > 0)
             return output_probs
