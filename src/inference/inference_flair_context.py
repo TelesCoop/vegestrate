@@ -285,6 +285,11 @@ def process_tile_with_context(
         print(f"  ✗ Could not parse coordinates from {tile_id}")
         return False
 
+    output_path = output_dir / f"prediction_{coords[0]}_{coords[1]}.tif"
+    if output_path.exists():
+        print(f"  ⏭ Already exists: {output_path}")
+        return True
+
     neighbors = find_tile_neighbors(coords, tile_map, grid_step)
 
     mosaic, center_meta, data_tile_size = create_mosaic_from_tiles(neighbors)
@@ -332,8 +337,6 @@ def process_tile_with_context(
                 data_tile_size, data_tile_size, data_tile_size, data_tile_size
             ),
         )
-
-    output_path = output_dir / f"prediction_{coords[0]}_{coords[1]}.tif"
 
     with rasterio.open(
         output_path,
