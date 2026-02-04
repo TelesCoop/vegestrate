@@ -39,12 +39,19 @@ def build_tile_map_from_manifest(
     return tile_map
 
 
-def initialize_model(checkpoint_path: Path, batch_size: int = 8) -> FlairSegmentation:
+def initialize_model(
+    checkpoint_path: Path,
+    batch_size: int = 8,
+    use_fp16: bool = True,
+    use_compile: bool = True,
+) -> FlairSegmentation:
     """Initialize FLAIR segmentation model.
 
     Args:
         checkpoint_path: Path to checkpoint file
         batch_size: Number of tiles to process simultaneously
+        use_fp16: Use FP16 mixed precision
+        use_compile: Use torch.compile optimization
 
     Returns:
         Initialized FlairSegmentation model
@@ -57,6 +64,8 @@ def initialize_model(checkpoint_path: Path, batch_size: int = 8) -> FlairSegment
         use_simplified_classes=True,
         checkpoint_num_classes=checkpoint_num_classes,
         batch_size=batch_size,
+        use_fp16=use_fp16,
+        use_compile=use_compile,
     )
 
     print("\nAvailable classes (4 simplified classes):")
@@ -356,6 +365,8 @@ def print_config(
     print(f"Overlap: {args.overlap} ({100 * args.overlap / args.tile_size:.0f}%)")
     print(f"Grid step: {args.grid_step}")
     print(f"Batch size: {args.batch_size}")
+    print(f"FP16: {'disabled' if args.no_fp16 else 'ENABLED'}")
+    print(f"torch.compile: {'disabled' if args.no_compile else 'ENABLED'}")
     tta_str = ", ".join(args.tta_modes) if args.tta_modes else "hflip, vflip, hvflip"
     print(f"TTA: {'ENABLED (' + tta_str + ')' if use_tta else 'disabled'}")
     if class_logit_bias:
@@ -470,8 +481,18 @@ def parse_args():
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=16,
-        help="Number of tiles to process simultaneously (default: 16).",
+        default=8,
+        help="Number of tiles to process simultaneously (default: 8).",
+    )
+    parser.add_argument(
+        "--no-fp16",
+        action="store_true",
+        help="Disable FP16 mixed precision (enabled by default for faster inference)",
+    )
+    parser.add_argument(
+        "--no-compile",
+        action="store_true",
+        help="Disable torch.compile optimization (enabled by default)",
     )
     return parser.parse_args()
 
@@ -506,7 +527,12 @@ def main():
     tile_map = build_tile_map_from_manifest(manifest, data_dir)
     print_tile_map_info(tile_map)
 
-    model = initialize_model(checkpoint_path, batch_size=args.batch_size)
+    model = initialize_model(
+        checkpoint_path,
+        batch_size=args.batch_size,
+        use_fp16=not args.no_fp16,
+        use_compile=not args.no_compile,
+    )
 
     total_processed = 0
     for split in args.splits:

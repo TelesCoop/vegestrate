@@ -26,6 +26,8 @@ class FlairSegmentation:
         use_simplified_classes: bool = True,
         checkpoint_num_classes: Optional[int] = None,
         batch_size: int = 8,
+        use_fp16: bool = True,
+        use_compile: bool = True,
     ):
         """
         Initialize FLAIR segmentation model.
@@ -37,10 +39,14 @@ class FlairSegmentation:
             checkpoint_num_classes: Number of classes in checkpoint (auto-detect if None)
                                     Use 4 for fine-tuned, 19 for pretrained
             batch_size: Number of tiles to process simultaneously (default: 8)
+            use_fp16: Use FP16 mixed precision for faster inference (default: True)
+            use_compile: Use torch.compile for optimization (default: True)
         """
         self.checkpoint_path = Path(checkpoint_path)
         self.use_simplified_classes = use_simplified_classes
         self.batch_size = batch_size
+        self.use_fp16 = use_fp16 and torch.cuda.is_available()
+        self.use_compile = use_compile
 
         if device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -61,6 +67,8 @@ class FlairSegmentation:
         print(f"Checkpoint: {self.checkpoint_path}")
         print(f"Model classes: {self.num_classes}")
         print(f"Batch size: {self.batch_size}")
+        print(f"FP16: {self.use_fp16}")
+        print(f"torch.compile: {self.use_compile}")
         if self.use_simplified_classes:
             print("Mode: 4 simplified classes (else, herbaceous, hedge, trees)")
         else:
@@ -79,6 +87,11 @@ class FlairSegmentation:
             num_classes=self.num_classes,
             device=self.device,
         )
+
+        if self.use_compile:
+            print("  Compiling model with torch.compile...")
+            self.model = torch.compile(self.model, mode="reduce-overhead")
+            print("  ✓ Model compiled")
 
         self.current_tile_size = tile_size
         print("  ✓ Model loaded")
@@ -240,18 +253,19 @@ class FlairSegmentation:
         if self.model is None:
             raise RuntimeError("Model not loaded")
 
-        logits_tasks, _ = self.model(batch)
-        logits = logits_tasks["AERIAL_LABEL-COSIA"]
+        with torch.cuda.amp.autocast(enabled=self.use_fp16):
+            logits_tasks, _ = self.model(batch)
+            logits = logits_tasks["AERIAL_LABEL-COSIA"]
 
-        if logits.shape[2:] != (tile_size, tile_size):
-            logits = F.interpolate(
-                logits,
-                size=(tile_size, tile_size),
-                mode="bilinear",
-                align_corners=False,
-            )
+            if logits.shape[2:] != (tile_size, tile_size):
+                logits = F.interpolate(
+                    logits,
+                    size=(tile_size, tile_size),
+                    mode="bilinear",
+                    align_corners=False,
+                )
 
-        return logits.cpu().numpy()
+        return logits.float().cpu().numpy()
 
     def _segment_single_pass(
         self,
