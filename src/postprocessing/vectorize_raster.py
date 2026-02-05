@@ -4,16 +4,47 @@ from pathlib import Path
 from osgeo import gdal, ogr, osr
 
 
+def sieve_raster(src_ds, threshold, connectedness=4):
+    print(
+        f"Applying sieve filter (threshold={threshold} pixels, {connectedness}-connected)..."
+    )
+
+    src_band = src_ds.GetRasterBand(1)
+    driver = gdal.GetDriverByName("MEM")
+    sieved_ds = driver.Create(
+        "", src_ds.RasterXSize, src_ds.RasterYSize, 1, src_band.DataType
+    )
+    sieved_ds.SetGeoTransform(src_ds.GetGeoTransform())
+    sieved_ds.SetProjection(src_ds.GetProjection())
+    sieved_band = sieved_ds.GetRasterBand(1)
+
+    sieved_band.WriteArray(src_band.ReadAsArray())
+
+    gdal.SieveFilter(
+        sieved_band,
+        None,
+        sieved_band,
+        threshold,
+        connectedness,
+        callback=gdal.TermProgress,
+    )
+    print()
+    return sieved_ds
+
+
 def vectorize_raster(
     raster_path,
     vector_path,
     vector_format="GPKG",
     use_8connected=False,
     field_name="class",
+    sieve_threshold=0,
 ):
     print(f"\n{'=' * 70}")
     print(f"Vectorizing: {raster_path} -> {vector_path}")
     print(f"Format: {vector_format}, 8-connected: {use_8connected}")
+    if sieve_threshold > 0:
+        print(f"Sieve threshold: {sieve_threshold} pixels")
     print(f"{'=' * 70}\n")
 
     src_ds = gdal.Open(str(raster_path))
@@ -21,7 +52,13 @@ def vectorize_raster(
         print(f"✗ Error: Could not open raster: {raster_path}")
         return False
 
-    src_band = src_ds.GetRasterBand(1)
+    sieved_ds = None
+    if sieve_threshold > 0:
+        connectedness = 8 if use_8connected else 4
+        sieved_ds = sieve_raster(src_ds, sieve_threshold, connectedness)
+        src_band = sieved_ds.GetRasterBand(1)
+    else:
+        src_band = src_ds.GetRasterBand(1)
 
     driver_name = (
         vector_format if vector_format != "ESRI Shapefile" else "ESRI Shapefile"
@@ -54,10 +91,14 @@ def vectorize_raster(
 
     gdal.Polygonize(src_band, None, dst_layer, 0, options, callback=gdal.TermProgress)
 
+    print(
+        "\nFlushing and indexing (this may take a while for large files)...", flush=True
+    )
     dst_ds = None
+    sieved_ds = None
     src_ds = None
 
-    print(f"\n✓ Vectorization complete: {vector_path}")
+    print(f"✓ Vectorization complete: {vector_path}")
     return True
 
 
@@ -67,9 +108,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python -m src/postprocessing/vectorize_raster -i final_fused.tif -o final_fused.gpkg
-  python -m src/postprocessing/vectorize_raster -i final_fused.tif -o final_fused.shp
-  python -m src/postprocessing/vectorize_raster -i final_fused.tif -o final_fused.geojson --8connected
+  python src/postprocessing/vectorize_raster.py -i final_fused.tif -o final_fused.gpkg
+  python src/postprocessing/vectorize_raster.py -i final_fused.tif -o final_fused.gpkg --sieve 25
+  python src/postprocessing/vectorize_raster.py -i final_fused.tif -o final_fused.shp --sieve 0
         """,
     )
 
@@ -111,6 +152,14 @@ Examples:
         help="Use 8-connectedness for polygonization (treats diagonal pixels as connected)",
     )
 
+    parser.add_argument(
+        "--sieve",
+        type=int,
+        default=25,
+        metavar="N",
+        help="Remove regions smaller than N pixels before vectorizing (default: 25). 2 would remove only single pixels). Set to 0 to disable.",
+    )
+
     args = parser.parse_args()
 
     input_path = Path(args.input)
@@ -135,6 +184,7 @@ Examples:
         vector_format=vector_format,
         use_8connected=args.use_8connected,
         field_name=args.field_name,
+        sieve_threshold=args.sieve,
     )
 
     return 0 if success else 1

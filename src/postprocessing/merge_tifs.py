@@ -549,7 +549,7 @@ def main():
     parser.add_argument(
         "--pixel-size",
         type=float,
-        default=0.8,
+        default=0.2,
         help="Raster pixel size in map units (default: 0.8 for Grand Lyon data)",
     )
 
