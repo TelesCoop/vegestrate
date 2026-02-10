@@ -1,6 +1,6 @@
 from osgeo import gdal
 import numpy as np
-from scipy.ndimage import binary_dilation, binary_erosion
+import cv2
 import argparse
 import tempfile
 import os
@@ -12,7 +12,7 @@ CLASS_PRIORITY = [1, 2, 3]
 def make_disk(radius):
     L = np.arange(-radius, radius + 1)
     X, Y = np.meshgrid(L, L)
-    return (X**2 + Y**2) <= radius**2
+    return ((X**2 + Y**2) <= radius**2).astype(np.uint8)
 
 
 def sieve_raster(input_path, output_path, threshold, connectedness=4):
@@ -39,51 +39,83 @@ def sieve_raster(input_path, output_path, threshold, connectedness=4):
     print()
 
 
-def morphological_clean(input_path, output_path, radius=5):
-    """Closing: dilation, fusion, erosion. Remove small area and smooth geometries."""
-    print(f"Morphological close (disk radius={radius} pixels)...")
-
-    src_ds = gdal.Open(input_path)
-    data = src_ds.GetRasterBand(1).ReadAsArray()
-    print(f"  Raster size: {data.shape[1]}x{data.shape[0]} pixels")
-
-    struct = make_disk(radius)
+def _morph_close_block(data, kernel):
     result = np.zeros_like(data)
 
     for cls in CLASS_PRIORITY:
-        mask = data == cls
-        dilated = binary_dilation(mask, structure=struct)
-        result[dilated] = cls
-
-    del data
-    gc.collect()
+        mask = (data == cls).view(np.uint8)
+        dilated = cv2.dilate(mask, kernel)
+        result[dilated > 0] = cls
 
     for cls in CLASS_PRIORITY:
-        mask = result == cls
-        eroded = binary_erosion(mask, structure=struct)
-        result[mask & ~eroded] = 0
+        mask = (result == cls).view(np.uint8)
+        eroded = cv2.erode(mask, kernel)
+        result[(mask > 0) & (eroded == 0)] = 0
 
     for cls in CLASS_PRIORITY:
         unclaimed = result == 0
-        neighbors = binary_dilation(result == cls, structure=struct)
-        result[unclaimed & neighbors] = cls
+        neighbors = cv2.dilate((result == cls).view(np.uint8), kernel)
+        result[unclaimed & (neighbors > 0)] = cls
+
+    return result
+
+
+def morphological_clean(input_path, output_path, radius=5, block_size=4096):
+    print(f"Morphological close (disk radius={radius} pixels)...")
+
+    src_ds = gdal.Open(input_path)
+    width = src_ds.RasterXSize
+    height = src_ds.RasterYSize
+    band = src_ds.GetRasterBand(1)
+    print(f"  Raster size: {width}x{height} pixels")
+
+    kernel = make_disk(radius)
+    pad = radius + 1
 
     driver = gdal.GetDriverByName("GTiff")
     out_ds = driver.Create(
         output_path,
-        src_ds.RasterXSize,
-        src_ds.RasterYSize,
+        width,
+        height,
         1,
         gdal.GDT_Byte,
         options=["COMPRESS=DEFLATE", "TILED=YES", "BIGTIFF=YES"],
     )
     out_ds.SetGeoTransform(src_ds.GetGeoTransform())
     out_ds.SetProjection(src_ds.GetProjection())
-    out_ds.GetRasterBand(1).WriteArray(result)
+    out_band = out_ds.GetRasterBand(1)
+
+    n_blocks_x = (width + block_size - 1) // block_size
+    n_blocks_y = (height + block_size - 1) // block_size
+    total = n_blocks_x * n_blocks_y
+    done = 0
+
+    for by in range(0, height, block_size):
+        for bx in range(0, width, block_size):
+            bw = min(block_size, width - bx)
+            bh = min(block_size, height - by)
+
+            read_x = max(bx - pad, 0)
+            read_y = max(by - pad, 0)
+            read_x2 = min(bx + bw + pad, width)
+            read_y2 = min(by + bh + pad, height)
+
+            data = band.ReadAsArray(read_x, read_y, read_x2 - read_x, read_y2 - read_y)
+            result = _morph_close_block(data, kernel)
+
+            crop_x = bx - read_x
+            crop_y = by - read_y
+            out_band.WriteArray(
+                result[crop_y : crop_y + bh, crop_x : crop_x + bw], bx, by
+            )
+
+            del data, result
+            done += 1
+            print(f"\r  Block {done}/{total}", end="", flush=True)
+
     out_ds.FlushCache()
     out_ds = None
     src_ds = None
-    del result
     gc.collect()
     print()
 
