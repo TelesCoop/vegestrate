@@ -152,16 +152,15 @@ def main():
     if args.sieve > 0 and args.radius > 0:
         tmp_fd, tmp_path = tempfile.mkstemp(suffix=".tif")
         os.close(tmp_fd)
-
-        sieve_raster(args.input, tmp_path, args.sieve)
+        morphological_clean(args.input, tmp_path, args.radius)
         gc.collect()
-        morphological_clean(tmp_path, args.output, args.radius)
-
-    elif args.sieve > 0:
-        sieve_raster(args.input, args.output, args.sieve)
+        sieve_raster(tmp_path, args.output, args.sieve)
 
     elif args.radius > 0:
         morphological_clean(args.input, args.output, args.radius)
+
+    elif args.sieve > 0:
+        sieve_raster(args.input, args.output, args.sieve)
 
     else:
         src_ds = gdal.Open(args.input)
