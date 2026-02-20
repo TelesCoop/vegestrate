@@ -3,8 +3,6 @@ import time
 from functools import partial
 from pathlib import Path
 
-import rasterio
-
 from src.core import (
     build_tile_list,
     load_manifest,
@@ -17,29 +15,6 @@ from src.data_preparation.prepare_training_data_grandlyon import (
     download_ir_mosaic,
     extract_ir_tile,
 )
-
-
-def combine_rgb_ir(tile_id, orthophoto_path, ir_path, output_dir):
-    rgbi_path = output_dir / f"{tile_id}_rgbi.tif"
-    if rgbi_path.exists():
-        print(f"RGBI tile already exists: {rgbi_path}")
-        return rgbi_path
-
-    with rasterio.open(orthophoto_path) as rgb_src:
-        rgb_data = rgb_src.read()
-        profile = rgb_src.profile.copy()
-
-    with rasterio.open(ir_path) as ir_src:
-        ir_data = ir_src.read(1)
-
-    profile.update(count=4, compress="lzw")
-
-    with rasterio.open(rgbi_path, "w", **profile) as dst:
-        dst.write(rgb_data)
-        dst.write(ir_data, 4)
-
-    print(f"RGBI tile saved: {rgbi_path}")
-    return rgbi_path
 
 
 def process_tile(ir_mosaic_path, manifest_dir, entry, output_dir):
@@ -62,9 +37,7 @@ def process_tile(ir_mosaic_path, manifest_dir, entry, output_dir):
         }
 
     try:
-        output_dir = Path(output_dir)
-        ir_path = extract_ir_tile(tile_id, ir_mosaic_path, orthophoto_path, output_dir)
-        combine_rgb_ir(tile_id, orthophoto_path, ir_path, output_dir)
+        extract_ir_tile(tile_id, ir_mosaic_path, orthophoto_path, Path(output_dir))
         return {"tile_id": tile_id, "status": "success"}
     except Exception as e:
         return {"tile_id": tile_id, "status": "failed", "error": str(e)}
@@ -72,7 +45,7 @@ def process_tile(ir_mosaic_path, manifest_dir, entry, output_dir):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Download IR mosaic and combine with existing RGB orthophotos into RGBI tiles"
+        description="Download IR mosaic and extract IR tiles alongside existing orthophotos"
     )
     parser.add_argument(
         "--manifest",
@@ -119,7 +92,7 @@ def main():
         return
 
     print("=" * 70)
-    print("PREPARING RGBI TILES FROM GRANDLYON ORTHOPHOTOS + IR MOSAIC")
+    print("EXTRACTING IR TILES FROM GRANDLYON IR MOSAIC")
     print("=" * 70)
     print(f"Manifest:  {manifest_path}")
     print(f"IR mosaic: {ir_mosaic_path}")
