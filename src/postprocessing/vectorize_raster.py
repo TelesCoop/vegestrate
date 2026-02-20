@@ -71,8 +71,8 @@ def main():
         epilog="""
 Examples:
   python src/postprocessing/vectorize_raster.py -i final_fused.tif -o final_fused.gpkg
-  python src/postprocessing/vectorize_raster.py -i final_fused.tif -o final_fused.gpkg --sieve 25
-  python src/postprocessing/vectorize_raster.py -i final_fused.tif -o final_fused.shp --sieve 0
+  python src/postprocessing/vectorize_raster.py -i final_fused.tif -o final_fused.gpkg
+  python src/postprocessing/vectorize_raster.py -i final_fused.tif -o final_fused.shp
         """,
     )
 
@@ -112,14 +112,6 @@ Examples:
         dest="use_8connected",
         action="store_true",
         help="Use 8-connectedness for polygonization (treats diagonal pixels as connected)",
-    )
-
-    parser.add_argument(
-        "--sieve",
-        type=int,
-        default=25,
-        metavar="N",
-        help="Remove regions smaller than N pixels before vectorizing (default: 25). 2 would remove only single pixels). Set to 0 to disable.",
     )
 
     args = parser.parse_args()
