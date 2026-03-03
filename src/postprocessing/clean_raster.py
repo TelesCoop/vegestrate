@@ -39,29 +39,29 @@ def sieve_raster(input_path, output_path, threshold, connectedness=4):
     print()
 
 
-def _morph_close_block(data, kernel):
+def _morph_close_block(data, k_dil, k_er):
     result = np.zeros_like(data)
 
     for cls in CLASS_PRIORITY:
         mask = (data == cls).view(np.uint8)
-        dilated = cv2.dilate(mask, kernel)
+        dilated = cv2.dilate(mask, k_dil)
         result[dilated > 0] = cls
 
     for cls in CLASS_PRIORITY:
         mask = (result == cls).view(np.uint8)
-        eroded = cv2.erode(mask, kernel)
+        eroded = cv2.erode(mask, k_er)
         result[(mask > 0) & (eroded == 0)] = 0
 
     for cls in CLASS_PRIORITY:
         unclaimed = result == 0
-        neighbors = cv2.dilate((result == cls).view(np.uint8), kernel)
+        neighbors = cv2.dilate((result == cls).view(np.uint8), k_dil)
         result[unclaimed & (neighbors > 0)] = cls
 
     return result
 
 
-def morphological_clean(input_path, output_path, radius=5, block_size=4096):
-    print(f"Morphological close (disk radius={radius} pixels)...")
+def morphological_clean(input_path, output_path, r_dil=3, r_er=6, block_size=4096):
+    print(f"Morphological close (dilate={r_dil}, erode={r_er}, dilate={r_dil})...")
 
     src_ds = gdal.Open(input_path)
     width = src_ds.RasterXSize
@@ -69,8 +69,9 @@ def morphological_clean(input_path, output_path, radius=5, block_size=4096):
     band = src_ds.GetRasterBand(1)
     print(f"  Raster size: {width}x{height} pixels")
 
-    kernel = make_disk(radius)
-    pad = radius + 1
+    k_dil = make_disk(r_dil)
+    k_er = make_disk(r_er)
+    pad = r_dil + r_er + 1
 
     driver = gdal.GetDriverByName("GTiff")
     out_ds = driver.Create(
@@ -101,7 +102,7 @@ def morphological_clean(input_path, output_path, radius=5, block_size=4096):
             read_y2 = min(by + bh + pad, height)
 
             data = band.ReadAsArray(read_x, read_y, read_x2 - read_x, read_y2 - read_y)
-            result = _morph_close_block(data, kernel)
+            result = _morph_close_block(data, k_dil, k_er)
 
             crop_x = bx - read_x
             crop_y = by - read_y
@@ -134,30 +135,37 @@ def main():
         help="Remove regions smaller than N pixels (default: 13). Set to 0 to skip.",
     )
     parser.add_argument(
-        "--radius",
+        "--r-dil",
         type=int,
-        default=5,
+        default=3,
         metavar="N",
-        help="Disk radius in pixels for morphological closing (default: 5). Set to 0 to skip.",
+        help="Dilation disk radius (default: 3). Set to 0 to skip morphological step.",
+    )
+    parser.add_argument(
+        "--r-er",
+        type=int,
+        default=6,
+        metavar="N",
+        help="Erosion disk radius (default: 6).",
     )
 
     args = parser.parse_args()
     print(f"{'=' * 70}")
     print(f"  Sieve threshold: {args.sieve} pixels")
-    print(f"  Morph close radius: {args.radius} pixels")
+    print(f"  Morph close: dilate={args.r_dil}, erode={args.r_er}, dilate={args.r_dil}")
     print(f"{'=' * 70}\n")
 
     tmp_path = None
 
-    if args.sieve > 0 and args.radius > 0:
+    if args.sieve > 0 and args.r_dil > 0:
         tmp_fd, tmp_path = tempfile.mkstemp(suffix=".tif")
         os.close(tmp_fd)
-        morphological_clean(args.input, tmp_path, args.radius)
+        morphological_clean(args.input, tmp_path, args.r_dil, args.r_er)
         gc.collect()
         sieve_raster(tmp_path, args.output, args.sieve)
 
-    elif args.radius > 0:
-        morphological_clean(args.input, args.output, args.radius)
+    elif args.r_dil > 0:
+        morphological_clean(args.input, args.output, args.r_dil, args.r_er)
 
     elif args.sieve > 0:
         sieve_raster(args.input, args.output, args.sieve)

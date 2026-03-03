@@ -31,6 +31,13 @@ merge: # postprocessing/merge_tifs.py
   smooth_cores: 3
   resample_mismatch: false
 
+clean_raster: # postprocessing/clean_raster.py
+  sieve: 13
+  morph_ops:
+    - [dilate, 3]
+    - [erode, 6]
+    - [dilate, 3]
+
 vectorization: # postprocessing/vectorize_raster.py
   format: ESRI Shapefile
   eight_connected: false
@@ -41,4 +48,5 @@ phases:
   flair_inference: true
   lidar_flair_merge: true
   final_merge: true
+  clean_raster: true
   vectorization: false

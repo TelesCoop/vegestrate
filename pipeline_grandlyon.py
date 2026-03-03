@@ -257,6 +257,48 @@ def phase_final_merge(config: dict) -> bool:
     return True
 
 
+def _raster_for_split(output_name: str, split: str) -> str:
+    clean = f"final_{output_name}_{split}_clean.tif"
+    return clean if Path(clean).exists() else f"final_{output_name}_{split}.tif"
+
+
+def phase_clean_raster(config: dict) -> bool:
+    output_name = config["pipeline"]["output_name"]
+    for split in config["pipeline"]["splits"]:
+        input_file = f"final_{output_name}_{split}.tif"
+        output_file = f"final_{output_name}_{split}_clean.tif"
+
+        if not Path(input_file).exists():
+            print(f"\n✗ Error: Final raster not found: {input_file}")
+            return False
+
+        morph_ops = config["clean_raster"].get(
+            "morph_ops", [["dilate", 3], ["erode", 6], ["dilate", 3]]
+        )
+        r_dil, r_er = morph_ops[0][1], morph_ops[1][1]
+        cmd_args = [
+            "--input",
+            input_file,
+            "--output",
+            output_file,
+            "--sieve",
+            str(config["clean_raster"].get("sieve", 13)),
+            "--r-dil",
+            str(r_dil),
+            "--r-er",
+            str(r_er),
+        ]
+
+        if not run_module_main(
+            "src.postprocessing.clean_raster",
+            cmd_args,
+            f"PHASE 5: Clean raster for {split} split",
+        ):
+            return False
+
+    return True
+
+
 def phase_vectorization(config: dict) -> bool:
     try:
         from src.postprocessing.vectorize_raster import vectorize_raster
@@ -272,7 +314,7 @@ def phase_vectorization(config: dict) -> bool:
     ext = ext_map[vec_fmt]
 
     for split in config["pipeline"]["splits"]:
-        output_file = f"final_{output_name}_{split}.tif"
+        output_file = _raster_for_split(output_name, split)
         if not Path(output_file).exists():
             print(f"\n✗ Warning: Final raster not found: {output_file}")
             continue
@@ -280,7 +322,7 @@ def phase_vectorization(config: dict) -> bool:
         vector_output = f"final_{output_name}_{split}.{ext}"
 
         print(f"\n{'=' * 70}")
-        print(f"PHASE 5: Vectorization for {split} split")
+        print(f"PHASE 6: Vectorization for {split} split")
         print(f"{'=' * 70}\n")
 
         if not vectorize_raster(
@@ -300,6 +342,7 @@ PHASE_FUNCS = {
     "flair_inference": phase_flair_inference,
     "lidar_flair_merge": phase_lidar_flair_merge,
     "final_merge": phase_final_merge,
+    "clean_raster": phase_clean_raster,
     "vectorization": phase_vectorization,
 }
 
@@ -308,6 +351,7 @@ PHASE_ORDER = [
     "flair_inference",
     "lidar_flair_merge",
     "final_merge",
+    "clean_raster",
     "vectorization",
 ]
 
@@ -316,6 +360,7 @@ BLOCKING_PHASES = {
     "flair_inference",
     "lidar_flair_merge",
     "final_merge",
+    "clean_raster",
 }
 
 
@@ -346,9 +391,12 @@ def print_summary(config: dict, state: StateManager, elapsed: float) -> None:
     ext = ext_map.get(vec_fmt, "shp")
 
     for split in config["pipeline"]["splits"]:
-        output_file = f"final_{output_name}_{split}.tif"
-        if Path(output_file).exists():
-            print(f"  Final {split} raster: {output_file}")
+        clean_file = f"final_{output_name}_{split}_clean.tif"
+        raw_file = f"final_{output_name}_{split}.tif"
+        if Path(clean_file).exists():
+            print(f"  Final {split} raster (cleaned): {clean_file}")
+        elif Path(raw_file).exists():
+            print(f"  Final {split} raster: {raw_file}")
         if config["phases"].get("vectorization", False):
             vector_output = f"final_{output_name}_{split}.{ext}"
             if Path(vector_output).exists():
