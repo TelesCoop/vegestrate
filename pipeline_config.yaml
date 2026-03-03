@@ -1,0 +1,44 @@
+pipeline:
+  output_name: lyon
+  splits: [test]
+
+data: # data_preparation/prepare_training_data_grandlyon.py
+  manifest: data/dataset_manifest_grandlyon.json
+  resolution: 0.2
+  workers: 14
+  ir_mosaic: null
+  download_ir: false
+
+inference: # inference/inference_flair_context.py
+  checkpoint: FLAIR-HUB_LC-A_RGB_swinlarge-upernet.safetensors
+  download_checkpoint: false
+  tile_size: 512
+  overlap: 256
+  grid_step: 5
+  tta: false
+  tta_modes: null  # e.g. [hflip, vflip, hvflip] — null means all three
+  batch_size: 8
+  fp16: true
+  compile: true
+  use_ir: false
+  class_bias: ["1:2.0"] # e.g. ["1:2.0"] to boost herbaceous
+  herb_margin: 3.0
+
+merge: # postprocessing/merge_tifs.py
+  strategy: mode
+  smooth: false
+  smooth_iterations: 3
+  smooth_cores: 3
+  resample_mismatch: false
+
+vectorization: # postprocessing/vectorize_raster.py
+  format: ESRI Shapefile
+  eight_connected: false
+  field_name: class
+
+phases:
+  data_preparation: true
+  flair_inference: true
+  lidar_flair_merge: true
+  final_merge: true
+  vectorization: false

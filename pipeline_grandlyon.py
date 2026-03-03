@@ -1,21 +1,85 @@
 import argparse
+import hashlib
+import json
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 
+def load_config(path: str) -> dict:
+    import yaml
+
+    with open(path) as f:
+        return yaml.safe_load(f)
+
+
+def config_hash(path: str) -> str:
+    return hashlib.md5(Path(path).read_bytes()).hexdigest()[:8]
+
+
+class StateManager:
+    def __init__(self, state_path: Path, cfg_hash: str):
+        self.state_path = state_path
+        self.cfg_hash = cfg_hash
+        if state_path.exists():
+            with open(state_path) as f:
+                self.state = json.load(f)
+            if self.state.get("config_hash") != cfg_hash:
+                print(
+                    "⚠ Config changed since last run — some phases may be stale. Use --force all to rerun everything."
+                )
+            for info in self.state["phases"].values():
+                if info["status"] == "running":
+                    info["status"] = "failed"
+                    info["error"] = "interrupted"
+            self._save()
+        else:
+            self.state = {
+                "config_hash": cfg_hash,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "phases": {},
+            }
+            self._save()
+
+    def _save(self):
+        self.state["config_hash"] = self.cfg_hash
+        with open(self.state_path, "w") as f:
+            json.dump(self.state, f, indent=2)
+
+    def should_run(self, phase: str, forced: set) -> bool:
+        if "all" in forced or phase in forced:
+            return True
+        status = self.state["phases"].get(phase, {}).get("status")
+        return status != "success"
+
+    def begin(self, phase: str):
+        self.state["phases"][phase] = {
+            "status": "running",
+            "start_time": datetime.now(timezone.utc).isoformat(),
+        }
+        self._save()
+
+    def end(self, phase: str, success: bool, error: str | None = None):
+        info = self.state["phases"].setdefault(phase, {})
+        start = info.get("start_time")
+        end_time = datetime.now(timezone.utc).isoformat()
+        info["status"] = "success" if success else "failed"
+        info["end_time"] = end_time
+        if start:
+            start_dt = datetime.fromisoformat(start)
+            end_dt = datetime.fromisoformat(end_time)
+            info["duration_seconds"] = round((end_dt - start_dt).total_seconds(), 1)
+        if error:
+            info["error"] = error
+        self._save()
+
+    def skip(self, phase: str, reason: str):
+        self.state["phases"][phase] = {"status": "skipped", "reason": reason}
+        self._save()
+
+
 def run_module_main(module_path: str, args: list[str], description: str) -> bool:
-    """
-    Import and run a module's main() function with custom arguments.
-
-    Args:
-        module_path: Module path (e.g., 'src.data_preparation.prepare_training_data_grandlyon')
-        args: List of command-line arguments to pass
-        description: Description of the operation for logging
-
-    Returns:
-        True if successful, False otherwise
-    """
     print(f"\n{'=' * 70}")
     print(f"{description}")
     print(f"{'=' * 70}")
@@ -26,10 +90,8 @@ def run_module_main(module_path: str, args: list[str], description: str) -> bool
         import importlib
 
         module = importlib.import_module(module_path)
-
         old_argv = sys.argv.copy()
         sys.argv = [module_path] + args
-
         try:
             result = module.main()
             success = result == 0 if result is not None else True
@@ -50,207 +112,70 @@ def run_module_main(module_path: str, args: list[str], description: str) -> bool
         return False
 
 
-def parse_arguments():
-    """Parse command line arguments for the pipeline."""
-    parser = argparse.ArgumentParser(
-        description="Complete GrandLyon vegetation stratification pipeline",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Pipeline phases:
-  1. Update manifest (optional with --update-manifest)
-  2. Data preparation: LiDAR + orthophotos (parallel)
-  3. FLAIR context-aware inference
-  4. Merge LiDAR + FLAIR classifications
-  5. Final tile merge into single raster
-  6. Vectorization to shapefile/geopackage (optional)
-
-Examples:
-  python pipeline_grandlyon.py --checkpoint model.safetensors
-  python pipeline_grandlyon.py --skip-data-prep --checkpoint model.safetensors
-  python pipeline_grandlyon.py --only-merge
-  python pipeline_grandlyon.py --checkpoint model.safetensors --vectorize
-        """,
-    )
-
-    parser.add_argument(
+def phase_data_preparation(config: dict) -> bool:
+    cmd_args = [
         "--manifest",
-        type=str,
-        default="data/dataset_manifest_grandlyon.json",
-        help="Path to manifest JSON (default: data/dataset_manifest_grandlyon.json)",
-    )
-
-    parser.add_argument(
-        "--checkpoint",
-        type=str,
-        default="FLAIR-HUB_LC-A_RGB_swinlarge-upernet.safetensors",
-        help="Path to FLAIR checkpoint",
-    )
-
-    parser.add_argument(
+        config["data"]["manifest"],
         "--resolution",
-        type=float,
-        default=0.8,
-        help="Raster resolution in meters (default: 0.8)",
-    )
-
-    parser.add_argument(
+        str(config["data"]["resolution"]),
         "--workers",
-        type=int,
-        default=4,
-        help="Number of parallel workers (default: 4)",
-    )
-
-    parser.add_argument(
-        "--tile-size",
-        type=int,
-        default=384,
-        help="Tile size for FLAIR inference (default: 384)",
-    )
-
-    parser.add_argument(
-        "--overlap",
-        type=int,
-        default=192,
-        help="Tile overlap for inference (default: 192, 50%%)",
-    )
-
-    parser.add_argument(
-        "--grid-step",
-        type=int,
-        default=5,
-        help="Grid step between tiles (default: 5)",
-    )
-
-    parser.add_argument(
-        "--splits",
-        type=str,
-        nargs="+",
-        default=["test"],
-        help="Splits to process (default: test)",
-    )
-
-    parser.add_argument(
-        "--no-tta",
-        action="store_true",
-        help="Disable Test-Time Augmentation",
-    )
-
-    parser.add_argument(
-        "--output-name",
-        type=str,
-        default="lyon",
-        help="Output name prefix (default: lyon)",
-    )
-
-    parser.add_argument(
-        "--merge-strategy",
-        choices=["mode", "last"],
-        default="mode",
-        help="Final merge strategy (default: mode)",
-    )
-
-    parser.add_argument(
-        "--smooth",
-        action="store_true",
-        help="Apply smoothing to final raster",
-    )
-
-    parser.add_argument(
-        "--skip-data-prep",
-        action="store_true",
-        help="Skip data preparation phase",
-    )
-
-    parser.add_argument(
-        "--skip-inference",
-        action="store_true",
-        help="Skip inference phase",
-    )
-
-    parser.add_argument(
-        "--skip-lidar-flair-merge",
-        action="store_true",
-        help="Skip LiDAR+FLAIR merge phase",
-    )
-
-    parser.add_argument(
-        "--only-merge",
-        action="store_true",
-        help="Only run merge phases (skip data prep and inference)",
-    )
-
-    parser.add_argument(
-        "--vectorize",
-        action="store_true",
-        help="Vectorize final raster to vector format",
-    )
-
-    parser.add_argument(
-        "--vector-format",
-        choices=["ESRI Shapefile", "GPKG", "GeoJSON"],
-        default="ESRI Shapefile",
-        help="Vector output format (default: ESRI Shapefile)",
-    )
-
-    parser.add_argument(
-        "--vector-8connected",
-        action="store_true",
-        help="Use 8-connectedness for polygonization (treats diagonal pixels as connected)",
-    )
-
-    return parser.parse_args()
-
-
-def phase1_data_preparation(args) -> bool:
-    """Prepare training data from LiDAR and orthophotos."""
-    if args.only_merge or args.skip_data_prep:
-        return True
-
+        str(config["data"]["workers"]),
+    ]
+    if config["data"].get("ir_mosaic"):
+        cmd_args.extend(["--ir_mosaic", config["data"]["ir_mosaic"]])
+    if config["data"].get("download_ir", False):
+        cmd_args.append("--download_ir")
     return run_module_main(
         "src.data_preparation.prepare_training_data_grandlyon",
-        [
-            "--manifest",
-            args.manifest,
-            "--resolution",
-            str(args.resolution),
-            "--workers",
-            str(args.workers),
-        ],
+        cmd_args,
         "PHASE 1: Data preparation (LiDAR + orthophotos)",
     )
 
 
-def phase2_flair_inference(args) -> bool:
-    """Run FLAIR context-aware inference on orthophotos."""
-    if args.only_merge or args.skip_inference:
-        return True
-
-    checkpoint_path = Path(args.checkpoint)
-    if not checkpoint_path.exists():
-        print(f"\n✗ Error: Checkpoint not found: {checkpoint_path}")
+def phase_flair_inference(config: dict) -> bool:
+    checkpoint = config["inference"]["checkpoint"]
+    if not Path(checkpoint).exists():
+        print(f"\n✗ Error: Checkpoint not found: {checkpoint}")
         return False
 
-    predictions_dir = f"predictions_{args.output_name}"
+    output_name = config["pipeline"]["output_name"]
+    predictions_dir = f"predictions_{output_name}"
 
     cmd_args = [
         "--manifest",
-        args.manifest,
+        config["data"]["manifest"],
         "--checkpoint",
-        args.checkpoint,
+        checkpoint,
         "--output_dir",
         predictions_dir,
         "--tile_size",
-        str(args.tile_size),
+        str(config["inference"]["tile_size"]),
         "--overlap",
-        str(args.overlap),
+        str(config["inference"]["overlap"]),
         "--grid_step",
-        str(args.grid_step),
+        str(config["inference"]["grid_step"]),
         "--splits",
-        *args.splits,
+        *config["pipeline"]["splits"],
+        "--batch_size",
+        str(config["inference"].get("batch_size", 8)),
+        "--herb_margin",
+        str(config["inference"].get("herb_margin", 3.0)),
     ]
 
-    if args.no_tta:
-        cmd_args.append("--no_tta")
+    if config["inference"].get("download_checkpoint", False):
+        cmd_args.append("--download_checkpoint")
+    if not config["inference"].get("tta", True):
+        cmd_args.append("--no-tta")
+    if config["inference"].get("tta_modes"):
+        cmd_args.extend(["--tta-modes", *config["inference"]["tta_modes"]])
+    if config["inference"].get("class_bias"):
+        cmd_args.extend(["--class_bias", *config["inference"]["class_bias"]])
+    if not config["inference"].get("fp16", True):
+        cmd_args.append("--no-fp16")
+    if not config["inference"].get("compile", True):
+        cmd_args.append("--no-compile")
+    if config["inference"].get("use_ir", False):
+        cmd_args.append("--use_ir")
 
     return run_module_main(
         "src.inference.inference_flair_context",
@@ -259,15 +184,12 @@ def phase2_flair_inference(args) -> bool:
     )
 
 
-def phase3_merge_lidar_flair(args) -> bool:
-    """Merge LiDAR and FLAIR classification maps."""
-    if args.only_merge or args.skip_lidar_flair_merge:
-        return True
-
-    for split in args.splits:
+def phase_lidar_flair_merge(config: dict) -> bool:
+    output_name = config["pipeline"]["output_name"]
+    for split in config["pipeline"]["splits"]:
         las_dir = f"data/{split}"
-        flair_dir = f"predictions_{args.output_name}/{split}"
-        output_dir = f"merged_classifications_{args.output_name}/{split}"
+        flair_dir = f"predictions_{output_name}/{split}"
+        output_dir = f"merged_classifications_{output_name}/{split}"
 
         if not run_module_main(
             "src.postprocessing.merge_classifications",
@@ -286,11 +208,12 @@ def phase3_merge_lidar_flair(args) -> bool:
     return True
 
 
-def phase4_final_merge(args) -> bool:
-    """Merge all tiles into final rasters."""
-    for split in args.splits:
-        merged_dir = f"merged_classifications_{args.output_name}/{split}"
-        output_file = f"final_{args.output_name}_{split}.tif"
+def phase_final_merge(config: dict) -> bool:
+    output_name = config["pipeline"]["output_name"]
+    resolution = config["data"]["resolution"]
+    for split in config["pipeline"]["splits"]:
+        merged_dir = f"merged_classifications_{output_name}/{split}"
+        output_file = f"final_{output_name}_{split}.tif"
 
         if not Path(merged_dir).exists():
             print(f"\n✗ Warning: Merged directory not found: {merged_dir}")
@@ -302,21 +225,27 @@ def phase4_final_merge(args) -> bool:
             "--output",
             output_file,
             "--strategy",
-            args.merge_strategy,
+            config["merge"]["strategy"],
             "--clip-min",
             "0",
             "--clip-max",
             "3",
         ]
 
-        if args.smooth:
+        if config["merge"].get("smooth", False):
             cmd_args.extend(
                 [
                     "--smooth",
                     "--pixel-size",
-                    str(args.resolution),
+                    str(resolution),
+                    "--smooth-iterations",
+                    str(config["merge"].get("smooth_iterations", 3)),
+                    "--smooth-cores",
+                    str(config["merge"].get("smooth_cores", 3)),
                 ]
             )
+        if config["merge"].get("resample_mismatch", False):
+            cmd_args.append("--resample-mismatch")
 
         if not run_module_main(
             "src.postprocessing.merge_tifs",
@@ -328,11 +257,7 @@ def phase4_final_merge(args) -> bool:
     return True
 
 
-def phase5_vectorization(args) -> bool:
-    """Vectorize final rasters to vector format."""
-    if not args.vectorize:
-        return True
-
+def phase_vectorization(config: dict) -> bool:
     try:
         from src.postprocessing.vectorize_raster import vectorize_raster
     except ImportError as e:
@@ -340,16 +265,19 @@ def phase5_vectorization(args) -> bool:
         print("Make sure GDAL Python bindings are installed: pip install gdal")
         return False
 
-    for split in args.splits:
-        output_file = f"final_{args.output_name}_{split}.tif"
+    output_name = config["pipeline"]["output_name"]
+    vec_fmt = config["vectorization"]["format"]
+    eight_connected = config["vectorization"].get("eight_connected", False)
+    ext_map = {"ESRI Shapefile": "shp", "GPKG": "gpkg", "GeoJSON": "geojson"}
+    ext = ext_map[vec_fmt]
 
+    for split in config["pipeline"]["splits"]:
+        output_file = f"final_{output_name}_{split}.tif"
         if not Path(output_file).exists():
             print(f"\n✗ Warning: Final raster not found: {output_file}")
             continue
 
-        ext_map = {"ESRI Shapefile": "shp", "GPKG": "gpkg", "GeoJSON": "geojson"}
-        ext = ext_map[args.vector_format]
-        vector_output = f"final_{args.output_name}_{split}.{ext}"
+        vector_output = f"final_{output_name}_{split}.{ext}"
 
         print(f"\n{'=' * 70}")
         print(f"PHASE 5: Vectorization for {split} split")
@@ -358,78 +286,149 @@ def phase5_vectorization(args) -> bool:
         if not vectorize_raster(
             output_file,
             vector_output,
-            args.vector_format,
-            use_8connected=args.vector_8connected,
-            field_name="vegetation_class",
+            vec_fmt,
+            use_8connected=eight_connected,
+            field_name=config["vectorization"].get("field_name", "class"),
         ):
             print(f"\n⚠ Warning: Vectorization failed for {split} split")
 
     return True
 
 
-def print_summary(args, elapsed: float) -> None:
-    """Print pipeline completion summary and output locations."""
+PHASE_FUNCS = {
+    "data_preparation": phase_data_preparation,
+    "flair_inference": phase_flair_inference,
+    "lidar_flair_merge": phase_lidar_flair_merge,
+    "final_merge": phase_final_merge,
+    "vectorization": phase_vectorization,
+}
+
+PHASE_ORDER = [
+    "data_preparation",
+    "flair_inference",
+    "lidar_flair_merge",
+    "final_merge",
+    "vectorization",
+]
+
+BLOCKING_PHASES = {
+    "data_preparation",
+    "flair_inference",
+    "lidar_flair_merge",
+    "final_merge",
+}
+
+
+def print_summary(config: dict, state: StateManager, elapsed: float) -> None:
+    output_name = config["pipeline"]["output_name"]
     print("\n" + "=" * 70)
     print("PIPELINE COMPLETE")
     print("=" * 70)
     print(f"Total time: {elapsed:.1f}s ({elapsed / 60:.1f} minutes)")
-    print("\nOutputs:")
-    print(f"  Predictions: predictions_{args.output_name}/")
-    print(f"  Merged classifications: merged_classifications_{args.output_name}/")
 
-    for split in args.splits:
-        output_file = f"final_{args.output_name}_{split}.tif"
+    print("\nPhase results:")
+    for phase in PHASE_ORDER:
+        info = state.state["phases"].get(phase, {})
+        status = info.get("status", "pending")
+        dur = info.get("duration_seconds")
+        dur_str = f"  ({dur:.1f}s)" if dur is not None else ""
+        symbol = {"success": "✓", "failed": "✗", "skipped": "→", "pending": " "}.get(
+            status, " "
+        )
+        print(f"  {symbol} {phase}: {status}{dur_str}")
+
+    print("\nOutputs:")
+    print(f"  Predictions: predictions_{output_name}/")
+    print(f"  Merged classifications: merged_classifications_{output_name}/")
+
+    vec_fmt = config["vectorization"]["format"]
+    ext_map = {"ESRI Shapefile": "shp", "GPKG": "gpkg", "GeoJSON": "geojson"}
+    ext = ext_map.get(vec_fmt, "shp")
+
+    for split in config["pipeline"]["splits"]:
+        output_file = f"final_{output_name}_{split}.tif"
         if Path(output_file).exists():
             print(f"  Final {split} raster: {output_file}")
-
-        if args.vectorize:
-            ext_map = {"ESRI Shapefile": "shp", "GPKG": "gpkg", "GeoJSON": "geojson"}
-            ext = ext_map[args.vector_format]
-            vector_output = f"final_{args.output_name}_{split}.{ext}"
+        if config["phases"].get("vectorization", False):
+            vector_output = f"final_{output_name}_{split}.{ext}"
             if Path(vector_output).exists():
                 print(f"  Final {split} vector: {vector_output}")
 
 
 def main() -> int:
-    """Execute the complete vegetation stratification pipeline.
+    parser = argparse.ArgumentParser(
+        description="Complete GrandLyon vegetation stratification pipeline",
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="pipeline_config.yaml",
+        help="Path to YAML config file (default: pipeline_config.yaml)",
+    )
+    parser.add_argument(
+        "--force",
+        nargs="+",
+        default=[],
+        metavar="PHASE",
+        help="Force specific phases to rerun (use 'all' to force everything)",
+    )
+    args = parser.parse_args()
 
-    Returns:
-        0 on success, 1 on failure
-    """
-    args = parse_arguments()
+    config_path = args.config
+    forced = set(args.force)
+
+    config = load_config(config_path)
+    cfg_hash = config_hash(config_path)
+
+    state_path = Path(config_path).with_name(Path(config_path).stem + "_state.json")
+    state = StateManager(state_path, cfg_hash)
+
     start_time = time.time()
 
     print("=" * 70)
     print("GRANDLYON VEGETATION STRATIFICATION PIPELINE")
     print("=" * 70)
-    print(f"Manifest: {args.manifest}")
-    print(f"Checkpoint: {args.checkpoint}")
-    print(f"Resolution: {args.resolution}m")
-    print(f"Splits: {', '.join(args.splits)}")
-    print(f"Output prefix: {args.output_name}")
+    print(f"Config: {config_path}")
+    print(f"State:  {state_path}")
+    print(f"Manifest: {config['data']['manifest']}")
+    print(f"Checkpoint: {config['inference']['checkpoint']}")
+    print(f"Resolution: {config['data']['resolution']}m")
+    print(f"Splits: {', '.join(config['pipeline']['splits'])}")
+    print(f"Output prefix: {config['pipeline']['output_name']}")
 
-    manifest_path = Path(args.manifest)
-
+    manifest_path = Path(config["data"]["manifest"])
     if not manifest_path.exists():
         print(f"\n✗ Error: Manifest not found: {manifest_path}")
-        print("Run with --update-manifest first")
         return 1
 
-    if not phase1_data_preparation(args):
-        return 1
+    for phase_name in PHASE_ORDER:
+        if not config["phases"].get(phase_name, True):
+            state.skip(phase_name, "disabled in config")
+            continue
 
-    if not phase2_flair_inference(args):
-        return 1
+        if not state.should_run(phase_name, forced):
+            dur = state.state["phases"][phase_name].get("duration_seconds")
+            dur_str = f" in {dur:.1f}s" if dur is not None else ""
+            print(f"→ {phase_name}: skipping (succeeded{dur_str})")
+            continue
 
-    phase3_merge_lidar_flair(args)
+        state.begin(phase_name)
+        try:
+            success = PHASE_FUNCS[phase_name](config)
+            state.end(phase_name, success)
+        except Exception as e:
+            import traceback
 
-    if not phase4_final_merge(args):
-        return 1
+            traceback.print_exc()
+            state.end(phase_name, False, error=str(e))
+            success = False
 
-    phase5_vectorization(args)
+        if not success and phase_name in BLOCKING_PHASES:
+            print(f"✗ Pipeline stopped at {phase_name}")
+            return 1
 
     elapsed = time.time() - start_time
-    print_summary(args, elapsed)
+    print_summary(config, state, elapsed)
 
     return 0
 
