@@ -397,7 +397,11 @@ def print_summary(config: dict, state: StateManager, elapsed: float) -> None:
             print(f"  Final {split} raster (cleaned): {clean_file}")
         elif Path(raw_file).exists():
             print(f"  Final {split} raster: {raw_file}")
-        if config["phases"].get("vectorization", False):
+        vec_cfg = config["phases"].get("vectorization", False)
+        vec_enabled = (
+            vec_cfg.get("enabled", False) if isinstance(vec_cfg, dict) else vec_cfg
+        )
+        if vec_enabled:
             vector_output = f"final_{output_name}_{split}.{ext}"
             if Path(vector_output).exists():
                 print(f"  Final {split} vector: {vector_output}")
@@ -450,7 +454,11 @@ def main() -> int:
         return 1
 
     for phase_name in PHASE_ORDER:
-        if not config["phases"].get(phase_name, True):
+        phase_cfg = config["phases"].get(phase_name, True)
+        enabled = (
+            phase_cfg.get("enabled", True) if isinstance(phase_cfg, dict) else phase_cfg
+        )
+        if not enabled:
             state.skip(phase_name, "disabled in config")
             continue
 

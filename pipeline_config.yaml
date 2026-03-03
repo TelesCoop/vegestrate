@@ -44,9 +44,21 @@ vectorization: # postprocessing/vectorize_raster.py
   field_name: class
 
 phases:
-  data_preparation: true
-  flair_inference: true
-  lidar_flair_merge: true
-  final_merge: true
-  clean_raster: true
-  vectorization: false
+  data_preparation:
+    enabled: true
+    depends_on: []
+  flair_inference:
+    enabled: true
+    depends_on: [data_preparation]
+  lidar_flair_merge:
+    enabled: true
+    depends_on: [data_preparation, flair_inference]
+  final_merge:
+    enabled: true
+    depends_on: [lidar_flair_merge]
+  clean_raster:
+    enabled: true
+    depends_on: [final_merge]
+  vectorization:
+    enabled: false
+    depends_on: [clean_raster]
