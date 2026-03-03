@@ -101,14 +101,17 @@ def morphological_clean(input_path, output_path, r_dil=3, r_er=6, block_size=409
             read_x2 = min(bx + bw + pad, width)
             read_y2 = min(by + bh + pad, height)
 
-            data = band.ReadAsArray(read_x, read_y, read_x2 - read_x, read_y2 - read_y)
+            rw, rh = read_x2 - read_x, read_y2 - read_y
+            buf = band.ReadRaster(read_x, read_y, rw, rh, buf_type=gdal.GDT_Byte)
+            data = np.frombuffer(buf, dtype=np.uint8).reshape(rh, rw).copy()
             result = _morph_close_block(data, k_dil, k_er)
 
             crop_x = bx - read_x
             crop_y = by - read_y
-            out_band.WriteArray(
-                result[crop_y : crop_y + bh, crop_x : crop_x + bw], bx, by
+            tile = np.ascontiguousarray(
+                result[crop_y : crop_y + bh, crop_x : crop_x + bw]
             )
+            out_band.WriteRaster(bx, by, bw, bh, tile.tobytes(), buf_type=gdal.GDT_Byte)
 
             del data, result
             done += 1
