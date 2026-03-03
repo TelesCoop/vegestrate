@@ -38,7 +38,11 @@ def build_flair_config(num_classes: int = 19) -> dict:
                 "SENTINEL1-DESC_TS": False,
             },
             "inputs_channels": {
-                "AERIAL_RGBI": [1, 2, 3],  # RGB
+                "AERIAL_RGBI": [
+                    1,
+                    2,
+                    3,
+                ],  # pre-selected [IR, R, G] — see inference_flair_context.py
             },
             "aux_loss": {
                 "AERIAL_RGBI": False,
@@ -51,8 +55,8 @@ def build_flair_config(num_classes: int = 19) -> dict:
             },
             "normalization": {
                 "norm_type": "custom",
-                "AERIAL_RGBI_means": [105.66, 111.35, 102.18],
-                "AERIAL_RGBI_stds": [52.23, 45.62, 44.30],
+                "AERIAL_RGBI_means": [106.59, 105.66, 111.35],  # IR, R, G
+                "AERIAL_RGBI_stds": [39.78, 52.23, 45.62],
             },
         },
         "models": {

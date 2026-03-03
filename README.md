@@ -11,6 +11,7 @@ Ce travail a été réalisé dans le cadre du projet [IA.rbre](https://iarbre.fr
 - [⚙️ Méthode](#️-méthode)
 - [⚠️ Limites](#️-limites)
 - [📦 Installation](#-installation)
+- [🚀 Pipeline GrandLyon](#-pipeline-grandlyon)
 - [🛠️ Configuration de Pre-Commit](#️-configuration-de-pre-commit)
 - [🤝 Contribution](#-contribution)
 - [📜 Datapaper](#datapaper-flairhub)
@@ -136,23 +137,8 @@ vegestrate/
 Après installation, plusieurs commandes sont disponibles :
 
 ```bash
-# Pipeline complet
-vegestrate-pipeline --checkpoint model.safetensors
-
-# Étapes individuelles
-vegestrate-update-manifest              # Mettre à jour le manifeste
-vegestrate-prepare-data --workers 8     # Préparer les données
-vegestrate-inference --checkpoint model.safetensors  # Inférence FLAIR
-vegestrate-merge-classifications        # Fusion LiDAR + FLAIR
-vegestrate-merge-tifs --input merged/ --output final.tif  # Fusion finale
-vegestrate-vectorize -i final.tif -o final.gpkg  # Vectorisation
-```
-
-Vous pouvez aussi utiliser les modules Python directement :
-
-```bash
-python -m src.data_preparation.update_manifest_grandlyon
-python -m src.postprocessing.vectorize_raster -i input.tif -o output.gpkg
+python src/data_preparation/update_manifest_grandlyon
+python src/postprocessing/vectorize_raster -i input.tif -o output.gpkg
 python pipeline_grandlyon.py --help
 ```
 
@@ -164,6 +150,123 @@ Tous les modules utilisent des imports absolus depuis `src` :
 from src.core import create_classification_map
 from src.flairhub_utils import load_flair_model
 ```
+
+## 🚀 Pipeline GrandLyon
+
+Le pipeline complet est orchestré par `pipeline_grandlyon.py` et piloté par un fichier de configuration YAML. Un fichier d'état JSON enregistre le résultat de chaque phase et permet la reprise automatique après interruption.
+
+### Utilisation
+
+```bash
+# Premier lancement (utilise pipeline_config.yaml par défaut)
+python pipeline_grandlyon.py
+# ou
+vegestrate-pipeline
+
+# Fichier de configuration personnalisé → état dans mon_run_state.json
+python pipeline_grandlyon.py --config mon_run.yaml
+
+# Forcer la ré-exécution d'une ou plusieurs phases spécifiques
+python pipeline_grandlyon.py --force flair_inference
+python pipeline_grandlyon.py --force flair_inference lidar_flair_merge
+
+# Relancer toutes les phases depuis zéro
+python pipeline_grandlyon.py --force all
+```
+
+### Configuration (`pipeline_config.yaml`)
+
+Tous les paramètres sont regroupés dans un seul fichier YAML, versionnable et reproductible :
+
+```yaml
+pipeline:
+  output_name: lyon          # Préfixe des sorties (répertoires, fichiers TIF/SHP)
+  splits: [test]             # Splits à traiter : train, test, ou les deux
+
+data:                        # prepare_training_data_grandlyon.py
+  manifest: data/dataset_manifest_grandlyon.json
+  resolution: 0.2            # Résolution LiDAR rasterisée (mètres)
+  workers: 14                # Workers parallèles
+  ir_mosaic: null            # Chemin vers la mosaïque IR (optionnel)
+  download_ir: false         # Télécharger la mosaïque IR automatiquement
+
+inference:                   # inference_flair_context.py
+  checkpoint: FLAIR-HUB_LC-A_RGB_swinlarge-upernet.safetensors
+  download_checkpoint: false # Télécharger depuis HuggingFace si absent
+  tile_size: 512             # Taille des tuiles de traitement (pixels)
+  overlap: 256               # Chevauchement entre tuiles (50 % → blending lisse)
+  grid_step: 5               # Pas de grille entre dalles voisines
+  tta: true                  # Test-Time Augmentation (×4 temps, meilleure précision)
+  tta_modes: null            # null = [hflip, vflip, hvflip]
+  batch_size: 8              # Tuiles traitées en parallèle sur GPU
+  fp16: true                 # Précision mixte FP16
+  compile: true              # Optimisation torch.compile
+  use_ir: false              # Utiliser le canal infrarouge ([IR,R,G] au lieu de RGB)
+  class_bias: null           # Biais par classe, ex: ["1:2.0"] pour booster les herbacées
+  herb_margin: 3.0           # Récupération herbacée : marge sur le logit "else"
+
+merge:                       # merge_tifs.py
+  strategy: mode             # Stratégie de fusion des dalles : mode | last
+  smooth: false              # Lissage des artefacts de jointure entre dalles
+  smooth_iterations: 3       # Itérations de lissage
+  smooth_cores: 3            # Cœurs CPU alloués au lissage
+  resample_mismatch: false   # Rééchantillonner automatiquement les dalles hétérogènes
+
+vectorization:               # vectorize_raster.py
+  format: ESRI Shapefile     # Format vecteur : ESRI Shapefile | GPKG | GeoJSON
+  eight_connected: false     # Connexité 8 pour la polygonisation (diagonales incluses)
+  field_name: class          # Nom du champ attributaire dans le vecteur de sortie
+
+phases:                      # Activer / désactiver chaque phase
+  data_preparation: true
+  flair_inference: true
+  lidar_flair_merge: true
+  final_merge: true
+  vectorization: false       # Désactivée par défaut (requiert GDAL)
+```
+
+### Phases et ordre d'exécution
+
+| # | Nom | Bloquante | Description |
+|---|-----|-----------|-------------|
+| 1 | `data_preparation` | ✓ | Rasterisation LiDAR + extraction orthophotos depuis le manifeste |
+| 2 | `flair_inference` | ✓ | Inférence FLAIR-HUB avec contexte des dalles voisines |
+| 3 | `lidar_flair_merge` | ✓ | Fusion pixel-à-pixel des classifications LiDAR et FLAIR |
+| 4 | `final_merge` | ✓ | Assemblage de toutes les dalles en un raster unique |
+| 5 | `vectorization` | — | Polygonisation du raster final (optionnelle, non bloquante) |
+
+Une phase **bloquante** qui échoue arrête le pipeline. La vectorisation échoue avec un avertissement sans bloquer.
+
+### Suivi d'état et reprise automatique
+
+Le fichier `{config_stem}_state.json` (ex : `pipeline_config_state.json`) est créé automatiquement et mis à jour après chaque phase :
+
+```json
+{
+  "config_hash": "a3f8bc12",
+  "phases": {
+    "data_preparation": {
+      "status": "success",
+      "start_time": "2026-03-03T14:30:00+00:00",
+      "end_time": "2026-03-03T14:45:01+00:00",
+      "duration_seconds": 879.0
+    },
+    "flair_inference": {
+      "status": "failed",
+      "error": "Checkpoint not found"
+    }
+  }
+}
+```
+
+Les statuts possibles sont : `pending` · `running` · `success` · `failed` · `skipped`.
+
+Comportement à la reprise :
+- Les phases `success` sont sautées automatiquement
+- Une phase `running` au démarrage (pipeline interrompu) est relancée
+- Un changement de config depuis le dernier lancement affiche : `⚠ Config changed since last run — use --force all to rerun everything`
+
+---
 
 ## 🛠️ Configuration de Pre-Commit
 

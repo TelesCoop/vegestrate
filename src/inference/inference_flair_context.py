@@ -6,8 +6,14 @@ from typing import Optional
 import numpy as np
 import rasterio
 
-from src.core import load_manifest
+from src.core import download_file, load_manifest
 from src.inference.flair_segmentation import FlairSegmentation
+
+CHECKPOINT_IR_URL = (
+    "https://huggingface.co/IGNF/FLAIR-HUB_LC-A_IR_swinlarge-upernet/resolve/main/"
+    "FLAIR-HUB_LC-A_IR_swinlarge-upernet.safetensors?download=true"
+)
+CHECKPOINT_IR_NAME = "FLAIR-HUB_LC-A_IR_swinlarge-upernet.safetensors"
 
 
 def build_tile_map_from_manifest(
@@ -37,6 +43,28 @@ def build_tile_map_from_manifest(
             tile_map[coords] = ortho_path
 
     return tile_map
+
+
+def build_ir_tile_map(
+    tile_map: dict[tuple[int, int], Path],
+) -> dict[tuple[int, int], Path]:
+    """Build IR tile map from an existing RGB tile map.
+
+    Expects IR tiles to follow the naming convention
+    ``<tile_name>_ir.tif`` alongside the RGB orthophotos.
+
+    Args:
+        tile_map: Coordinate -> RGB orthophoto path mapping.
+
+    Returns:
+        Coordinate -> IR tile path mapping (only coords with an existing IR tile).
+    """
+    ir_map = {}
+    for coords, rgb_path in tile_map.items():
+        ir_path = rgb_path.parent / rgb_path.name.replace("_orthophoto.tif", "_ir.tif")
+        if ir_path.exists():
+            ir_map[coords] = ir_path
+    return ir_map
 
 
 def initialize_model(
@@ -89,6 +117,7 @@ def process_split(
     tta_modes: Optional[list[str]] = None,
     class_logit_bias: Optional[dict[int, float]] = None,
     herbaceous_recovery_margin: Optional[float] = None,
+    ir_tile_map: Optional[dict[tuple[int, int], Path]] = None,
 ) -> int:
     """Process all tiles in a split.
 
@@ -143,6 +172,7 @@ def process_split(
             tta_modes=tta_modes,
             class_logit_bias=class_logit_bias,
             herbaceous_recovery_margin=herbaceous_recovery_margin,
+            ir_tile_map=ir_tile_map,
         ):
             processed_count += 1
 
@@ -207,14 +237,25 @@ def find_tile_neighbors(
 
 def create_mosaic_from_tiles(
     neighbors: dict[str, Optional[Path]],
+    ir_neighbors: Optional[dict[str, Optional[Path]]] = None,
 ) -> tuple[Optional[np.ndarray], Optional[dict], Optional[int]]:
     """Create 3x3 mosaic from neighboring tiles.
 
+    When ``ir_neighbors`` is provided the mosaic has 3 channels ordered
+    [IR, R, G] — matching the FLAIR-HUB training configuration
+    ``AERIAL_RGBI: [4, 1, 2]`` with its corresponding normalisation stats.
+    Without IR the mosaic falls back to [R, G, B].
+
     Args:
-        neighbors: Dictionary from find_tile_neighbors()
+        neighbors: Dictionary from find_tile_neighbors() mapping position
+            keys (NW, N, …) to RGB orthophoto paths.
+        ir_neighbors: Optional dictionary with the same structure mapping to
+            IR tile paths.  When supplied, the returned mosaic uses IR band
+            as channel 0 instead of Blue.
 
     Returns:
-        Tuple of (mosaic_array, metadata, tile_size) or (None, None, None) if center missing
+        Tuple of (mosaic_array, metadata, tile_size) or (None, None, None)
+        if the centre tile is missing.
     """
     if neighbors["C"] is None:
         return None, None, None
@@ -236,23 +277,61 @@ def create_mosaic_from_tiles(
         ["SW", "S", "SE"],
     ]
 
+    use_ir = ir_neighbors is not None
+
     for row_idx, row in enumerate(layout):
         for col_idx, pos in enumerate(row):
             tile_path = neighbors[pos]
-
             if tile_path is None or not tile_path.exists():
                 continue
 
-            with rasterio.open(tile_path) as src:
-                img = src.read([1, 2, 3])
-                img = np.transpose(img, (1, 2, 0))
+            y_start = row_idx * data_tile_size
+            x_start = col_idx * data_tile_size
 
-                y_start = row_idx * data_tile_size
-                x_start = col_idx * data_tile_size
+            with rasterio.open(tile_path) as src:
+                if use_ir:
+                    r, g = src.read(1), src.read(2)
+                else:
+                    r, g, b = src.read(1), src.read(2), src.read(3)
+
+            if use_ir:
+                ir_path = ir_neighbors.get(pos)
+                if ir_path is not None and ir_path.exists():
+                    with rasterio.open(ir_path) as ir_src:
+                        ir = ir_src.read(1)
+                else:
+                    ir = np.zeros((data_tile_size, data_tile_size), dtype=np.uint8)
                 mosaic[
                     y_start : y_start + data_tile_size,
                     x_start : x_start + data_tile_size,
-                ] = img
+                    0,
+                ] = ir
+                mosaic[
+                    y_start : y_start + data_tile_size,
+                    x_start : x_start + data_tile_size,
+                    1,
+                ] = r
+                mosaic[
+                    y_start : y_start + data_tile_size,
+                    x_start : x_start + data_tile_size,
+                    2,
+                ] = g
+            else:
+                mosaic[
+                    y_start : y_start + data_tile_size,
+                    x_start : x_start + data_tile_size,
+                    0,
+                ] = r
+                mosaic[
+                    y_start : y_start + data_tile_size,
+                    x_start : x_start + data_tile_size,
+                    1,
+                ] = g
+                mosaic[
+                    y_start : y_start + data_tile_size,
+                    x_start : x_start + data_tile_size,
+                    2,
+                ] = b
 
     return mosaic, center_meta, data_tile_size
 
@@ -269,6 +348,7 @@ def process_tile_with_context(
     tta_modes: Optional[list[str]] = None,
     class_logit_bias: Optional[dict[int, float]] = None,
     herbaceous_recovery_margin: Optional[float] = None,
+    ir_tile_map: Optional[dict[tuple[int, int], Path]] = None,
 ) -> bool:
     """Process a single tile with neighboring context.
 
@@ -300,7 +380,13 @@ def process_tile_with_context(
 
     neighbors = find_tile_neighbors(coords, tile_map, grid_step)
 
-    mosaic, center_meta, data_tile_size = create_mosaic_from_tiles(neighbors)
+    ir_neighbors = None
+    if ir_tile_map:
+        ir_neighbors = find_tile_neighbors(coords, ir_tile_map, grid_step)
+
+    mosaic, center_meta, data_tile_size = create_mosaic_from_tiles(
+        neighbors, ir_neighbors
+    )
     if mosaic is None or center_meta is None or data_tile_size is None:
         print("  ✗ Failed to create mosaic")
         return False
@@ -369,6 +455,9 @@ def print_config(
     print(f"torch.compile: {'disabled' if args.no_compile else 'ENABLED'}")
     tta_str = ", ".join(args.tta_modes) if args.tta_modes else "hflip, vflip, hvflip"
     print(f"TTA: {'ENABLED (' + tta_str + ')' if use_tta else 'disabled'}")
+    print(
+        f"IR channel: {'ENABLED [IR, R, G]' if args.use_ir else 'disabled [R, G, B]'}"
+    )
     if class_logit_bias:
         bias_str = ", ".join(
             f"class {k}: {v:+.1f}" for k, v in class_logit_bias.items()
@@ -418,8 +507,13 @@ def parse_args():
     parser.add_argument(
         "--checkpoint",
         type=str,
-        default="FLAIR-HUB_LC-A_RGB_swinlarge-upernet.safetensors",
-        help="Path to FLAIR checkpoint",
+        default=CHECKPOINT_IR_NAME,
+        help="Path to FLAIR checkpoint (default: IR variant)",
+    )
+    parser.add_argument(
+        "--download_checkpoint",
+        action="store_true",
+        help="Download the IR checkpoint from HuggingFace if not present locally.",
     )
     parser.add_argument(
         "--output_dir",
@@ -494,6 +588,12 @@ def parse_args():
         action="store_true",
         help="Disable torch.compile optimization (enabled by default)",
     )
+    parser.add_argument(
+        "--use_ir",
+        action="store_true",
+        help="Use IR channel. Expects <tile>_ir.tif files alongside each orthophoto. "
+        "Builds [IR, R, G] mosaics matching the FLAIR-HUB AERIAL_RGBI:[4,1,2] config.",
+    )
     return parser.parse_args()
 
 
@@ -505,8 +605,14 @@ def main():
     checkpoint_path = Path(args.checkpoint)
 
     if not checkpoint_path.exists():
-        print(f"✗ Checkpoint not found: {checkpoint_path}")
-        sys.exit(1)
+        if args.download_checkpoint:
+            print("Downloading IR checkpoint from HuggingFace...")
+            download_file(CHECKPOINT_IR_URL, str(checkpoint_path))
+            print(f"✓ Checkpoint saved to {checkpoint_path}")
+        else:
+            print(f"✗ Checkpoint not found: {checkpoint_path}")
+            print("  Run with --download_checkpoint to fetch it automatically.")
+            sys.exit(1)
 
     if not manifest_path.exists():
         print(f"✗ Manifest not found: {manifest_path}")
@@ -526,6 +632,19 @@ def main():
     print("\nBuilding tile map from manifest...")
     tile_map = build_tile_map_from_manifest(manifest, data_dir)
     print_tile_map_info(tile_map)
+
+    ir_tile_map = None
+    if args.use_ir:
+        ir_tile_map = build_ir_tile_map(tile_map)
+        n_ir = len(ir_tile_map)
+        n_rgb = len(tile_map)
+        print(f"IR tiles found: {n_ir}/{n_rgb}")
+        if n_ir == 0:
+            print(
+                "  WARNING: no IR tiles found. Run prepare_training_data_grandlyon.py "
+                "with --ir_mosaic to extract them. Falling back to [R, G, B]."
+            )
+            ir_tile_map = None
 
     model = initialize_model(
         checkpoint_path,
@@ -554,6 +673,7 @@ def main():
             tta_modes=args.tta_modes,
             class_logit_bias=class_logit_bias,
             herbaceous_recovery_margin=args.herb_margin,
+            ir_tile_map=ir_tile_map,
         )
 
     print_summary(total_processed, output_dir, args.splits)

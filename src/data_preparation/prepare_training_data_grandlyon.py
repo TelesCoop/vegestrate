@@ -1,32 +1,14 @@
-#!/usr/bin/env python3
-"""Prepare training and testing data from GrandLyon LiDAR tiles.
-
-This script reads data/dataset_manifest_grandlyon.json and processes tiles:
-- Downloads LiDAR data (if not exists)
-- Generates classification_map.tif
-- Downloads corresponding orthophoto directly using tile name
-
-Supports parallel processing using threads for faster execution.
-
-Usage:
-    # First generate manifest
-    python update_manifest_grandlyon.py
-
-    # Then prepare data
-    python prepare_training_data_grandlyon.py --manifest data/dataset_manifest_grandlyon.json
-
-    # Use more threads for faster processing
-    python prepare_training_data_grandlyon.py --workers 8
-"""
-
 import argparse
+import os
 import time
 from functools import partial
 from pathlib import Path
 
 import laspy
+import numpy as np
 import rasterio
-import os
+import rasterio.enums
+import rasterio.transform
 
 from src.core import (
     build_tile_list,
@@ -40,44 +22,109 @@ from src.core import (
     setup_split_directories,
 )
 
+IR_MOSAIC_URL = "https://data.grandlyon.com/files/grandlyon/imagerie/ortho2023/infrarouge/tiff/Vue_ensemble_5cm_CC46/IR2023_Dalle_unique_5cm_CC46.tif"
+
 
 def extract_tile_name(url):
-    """Extract tile name from GrandLyon URL
-
-    Example:
-        https://data.grandlyon.com/files/grandlyon/imagerie/mnt2023/lidar/laz/18435_51770.laz
-        -> 18435_51770
-    """
     filename = url.split("/")[-1]
     tile_name = filename.split(".")[0]
     return tile_name
 
 
 def get_orthophoto_url(tile_name):
-    """Generate orthophoto URL from tile name
-
-    Args:
-        tile_name: Tile identifier like "18435_51770"
-
-    Returns:
-        URL to orthophoto TIF file
-    """
     base_url = "https://data.grandlyon.com/files/grandlyon/imagerie/ortho2023/ortho/tiff/500m_5cm_cc46"
     return f"{base_url}/{tile_name}_5cm_CC46.tif"
 
 
-def download_and_process_lidar(url, output_dir, resolution=0.2):
-    """
-    Download LiDAR data and create classification map
+def download_ir_mosaic(output_path):
+    """Download the full-coverage IR mosaic (~35 GB). Skips if already present.
 
     Args:
-        url: LiDAR download URL
-        output_dir: Directory to save outputs
-        resolution: Raster cell size in meters (default: 0.2)
+        output_path: Destination path for the downloaded GeoTIFF.
 
     Returns:
-        Path to classification_map.tif
+        Path to the IR mosaic.
     """
+    output_path = Path(output_path)
+    if output_path.exists():
+        print(f"✓ IR mosaic already exists: {output_path}")
+        return output_path
+
+    print(f"Downloading IR mosaic (~35 GB) from {IR_MOSAIC_URL}")
+    print("WARNING: this download will take a very long time.")
+    download_file(IR_MOSAIC_URL, str(output_path))
+    print(f"✓ IR mosaic downloaded to {output_path}")
+    return output_path
+
+
+def extract_ir_tile(tile_name, ir_mosaic_path, rgb_tile_path, output_dir):
+    """Extract and resample the IR channel for one tile from the IR mosaic.
+
+    Uses a windowed read so the 35 GB mosaic is never fully loaded.
+    The output pixel grid matches the corresponding RGB orthophoto exactly.
+
+    Args:
+        tile_name: Tile identifier (e.g. "18435_51770").
+        ir_mosaic_path: Path to the full IR mosaic GeoTIFF.
+        rgb_tile_path: Matching RGB orthophoto (provides target bounds and size).
+        output_dir: Directory to write the extracted IR tile.
+
+    Returns:
+        Path to the IR tile.
+    """
+    ir_path = output_dir / f"{tile_name}_ir.tif"
+    if ir_path.exists():
+        print(f"✓ IR tile already exists: {ir_path}")
+        return ir_path
+
+    with rasterio.open(rgb_tile_path) as rgb_src:
+        bounds = rgb_src.bounds
+        crs = rgb_src.crs
+        target_height = rgb_src.height
+        target_width = rgb_src.width
+
+    with rasterio.open(ir_mosaic_path) as ir_src:
+        window = ir_src.window(*bounds)
+        data = ir_src.read(
+            1,
+            window=window,
+            out_shape=(target_height, target_width),
+            resampling=rasterio.enums.Resampling.bilinear,
+        )
+        is_uint16 = ir_src.dtypes[0] == "uint16"
+
+    if is_uint16:
+        data = (data / 257).astype(np.uint8)
+    else:
+        data = data.astype(np.uint8)
+
+    tile_transform = rasterio.transform.from_bounds(
+        bounds.left,
+        bounds.bottom,
+        bounds.right,
+        bounds.top,
+        target_width,
+        target_height,
+    )
+    with rasterio.open(
+        ir_path,
+        "w",
+        driver="GTiff",
+        height=target_height,
+        width=target_width,
+        count=1,
+        dtype=rasterio.uint8,
+        crs=crs,
+        transform=tile_transform,
+        compress="lzw",
+    ) as dst:
+        dst.write(data, 1)
+
+    print(f"✓ IR tile saved: {ir_path}")
+    return ir_path
+
+
+def download_and_process_lidar(url, output_dir, resolution=0.2):
     filename = url.split("/")[-1]
     tile_name = extract_tile_name(url)
     laz_path = output_dir / filename
@@ -107,17 +154,6 @@ def download_and_process_lidar(url, output_dir, resolution=0.2):
 
 
 def download_orthophoto(tile_name, output_dir, resolution=0.2):
-    """
-    Download orthophoto directly from GrandLyon and resize to match classification map
-
-    Args:
-        tile_name: Tile identifier (e.g., "18435_51770")
-        output_dir: Directory to save orthophoto
-        resolution: Target resolution in meters (default: 0.2)
-
-    Returns:
-        Path to orthophoto.tif
-    """
     ortho_path = output_dir / f"{tile_name}_orthophoto.tif"
 
     if ortho_path.exists():
@@ -148,7 +184,7 @@ def download_orthophoto(tile_name, output_dir, resolution=0.2):
     return ortho_path
 
 
-def process_tile(resolution, entry, output_dir):
+def process_tile(resolution, entry, output_dir, ir_mosaic_path=None):
     url = entry["url"]
     tile_id = entry["tile_id"]
 
@@ -156,7 +192,10 @@ def process_tile(resolution, entry, output_dir):
         tile_name = extract_tile_name(url)
 
         download_and_process_lidar(url, output_dir, resolution)
-        download_orthophoto(tile_name, output_dir, resolution)
+        ortho_path = download_orthophoto(tile_name, output_dir, resolution)
+
+        if ir_mosaic_path is not None:
+            extract_ir_tile(tile_name, ir_mosaic_path, ortho_path, output_dir)
 
         return {"tile_id": tile_id, "status": "success"}
 
@@ -166,7 +205,6 @@ def process_tile(resolution, entry, output_dir):
 
 
 def main():
-    """Main function."""
     parser = argparse.ArgumentParser(
         description="Prepare data from GrandLyon LiDAR tiles using manifest"
     )
@@ -188,6 +226,18 @@ def main():
         default=14,
         help="Number of parallel workers (default: 14)",
     )
+    parser.add_argument(
+        "--ir_mosaic",
+        type=str,
+        default=None,
+        help="Path to the IR mosaic GeoTIFF. If provided, IR tiles are extracted "
+        "for each processed tile. Use --download_ir to fetch it first.",
+    )
+    parser.add_argument(
+        "--download_ir",
+        action="store_true",
+        help="Download the IR mosaic before processing tiles.",
+    )
 
     args = parser.parse_args()
 
@@ -199,15 +249,24 @@ def main():
         print("Run update_manifest_grandlyon.py first to create it")
         return
 
+    ir_mosaic_path = Path(args.ir_mosaic) if args.ir_mosaic else None
+
+    if args.download_ir:
+        if ir_mosaic_path is None:
+            ir_mosaic_path = manifest_path.parent / "IR2023_Dalle_unique_5cm_CC46.tif"
+        ir_mosaic_path = download_ir_mosaic(ir_mosaic_path)
+
     print("=" * 70)
     print("PREPARING TRAINING DATA FROM GRANDLYON LIDAR TILES (PARALLEL)")
     print("=" * 70)
     print(f"Manifest: {manifest_path}")
     print(f"Resolution: {args.resolution}m")
     print(f"Workers: {args.workers}")
+    if ir_mosaic_path:
+        print(f"IR mosaic: {ir_mosaic_path}")
     print("=" * 70)
 
-    manifest = load_manifest(manifest_path)
+    manifest = load_manifest(str(manifest_path))
     output_dir = manifest_path.parent
 
     split_dirs = setup_split_directories(output_dir, ["train", "test"])
@@ -216,7 +275,7 @@ def main():
     print(f"  Training: {len(manifest['train'])} tiles")
     print(f"  Testing: {len(manifest['test'])} tiles")
 
-    process_func = partial(process_tile, args.resolution)
+    process_func = partial(process_tile, args.resolution, ir_mosaic_path=ir_mosaic_path)
     successes, failures = process_tiles_parallel(
         all_tiles, process_func, max_workers=args.workers
     )
