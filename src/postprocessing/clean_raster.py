@@ -7,8 +7,6 @@ import os
 import gc
 from scipy.ndimage import uniform_filter
 
-CLASS_PRIORITY = [1, 2, 3]
-
 
 def make_disk(radius):
     L = np.arange(-radius, radius + 1)
@@ -113,22 +111,25 @@ def mode_filter_clean(input_path, output_path, kernel=3, iterations=1, block_siz
 
 
 def _morph_close_block(data, k_dil, k_er):
+    classes = range(1, 4)
+
+    dil = {cls: cv2.dilate((data == cls).astype(np.uint8), k_dil) for cls in classes}
+    claim_count = sum(dil[cls] for cls in classes)
     result = np.zeros_like(data)
+    for cls in classes:
+        result[(dil[cls] > 0) & (claim_count == 1)] = cls
+    result[claim_count > 1] = data[claim_count > 1]
 
-    for cls in CLASS_PRIORITY:
-        mask = (data == cls).view(np.uint8)
-        dilated = cv2.dilate(mask, k_dil)
-        result[dilated > 0] = cls
-
-    for cls in CLASS_PRIORITY:
-        mask = (result == cls).view(np.uint8)
+    for cls in classes:
+        mask = (result == cls).astype(np.uint8)
         eroded = cv2.erode(mask, k_er)
         result[(mask > 0) & (eroded == 0)] = 0
 
-    for cls in CLASS_PRIORITY:
-        unclaimed = result == 0
-        neighbors = cv2.dilate((result == cls).view(np.uint8), k_dil)
-        result[unclaimed & (neighbors > 0)] = cls
+    unclaimed = result == 0
+    dil2 = {cls: cv2.dilate((result == cls).astype(np.uint8), k_dil) for cls in classes}
+    claim_count2 = sum(dil2[cls] for cls in classes)
+    for cls in classes:
+        result[unclaimed & (dil2[cls] > 0) & (claim_count2 == 1)] = cls
 
     return result
 
