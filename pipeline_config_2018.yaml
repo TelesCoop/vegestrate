@@ -1,0 +1,65 @@
+pipeline:
+  output_name: lyon_2018
+  splits: [test]
+
+data: # data_preparation/prepare_training_data_2018.py
+  module: src.data_preparation.prepare_training_data_2018
+  manifest: data/dataset_manifest_2018.json
+  resolution: 0.2
+  workers: 14
+  ir_mosaic: null
+  download_ir: false
+
+inference: # inference/inference_flair_context.py
+  checkpoint: FLAIR-HUB_LC-A_IR_swinlarge-upernet.safetensors
+  download_checkpoint: false
+  tile_size: 512
+  overlap: 256
+  grid_step: 1
+  tta: false
+  tta_modes: null
+  batch_size: 8
+  fp16: true
+  compile: true
+  use_ir: true
+  class_bias: ["1:2.0"]
+  herb_margin: 3.0
+
+merge: # postprocessing/merge_tifs.py
+  strategy: mode
+  smooth: false
+  smooth_iterations: 3
+  smooth_cores: 3
+  resample_mismatch: false
+
+clean_raster: # postprocessing/clean_raster.py
+  sieve: 13
+  morph_ops:
+    - [dilate, 3]
+    - [erode, 6]
+    - [dilate, 3]
+
+vectorization: # postprocessing/vectorize_raster.py
+  format: ESRI Shapefile
+  eight_connected: false
+  field_name: class
+
+phases:
+  data_preparation:
+    enabled: true
+    depends_on: []
+  flair_inference:
+    enabled: true
+    depends_on: [data_preparation]
+  lidar_flair_merge:
+    enabled: true
+    depends_on: [data_preparation, flair_inference]
+  final_merge:
+    enabled: true
+    depends_on: [lidar_flair_merge]
+  clean_raster:
+    enabled: true
+    depends_on: [final_merge]
+  vectorization:
+    enabled: false
+    depends_on: [clean_raster]

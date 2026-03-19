@@ -9,6 +9,7 @@ import numpy as np
 import rasterio
 import rasterio.enums
 import rasterio.transform
+import rasterio.warp
 
 from src.core import (
     build_tile_list,
@@ -23,6 +24,171 @@ from src.core import (
 )
 
 IR_MOSAIC_URL = "https://data.grandlyon.com/files/grandlyon/imagerie/ortho2023/infrarouge/tiff/Vue_ensemble_5cm_CC46/IR2023_Dalle_unique_5cm_CC46.tif"
+ECW_CACHE_DIR = Path("data/ecw_cache")
+
+
+def _download_ecw_cached(url, cache_dir):
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    filename = url.split("/")[-1]
+    cached = cache_dir / filename
+    if cached.exists():
+        return cached
+    tmp = cache_dir / f"{filename}.{os.getpid()}.tmp"
+    download_file(url, str(tmp))
+    if not cached.exists():
+        tmp.rename(cached)
+    else:
+        tmp.unlink()
+    return cached
+
+
+def extract_orthophoto_from_ecw(
+    tile_id, ecw_url, classmap_path, output_dir, cache_dir=None
+):
+    if cache_dir is None:
+        cache_dir = ECW_CACHE_DIR
+
+    ortho_path = output_dir / f"{tile_id}_orthophoto.tif"
+    if ortho_path.exists():
+        return ortho_path
+
+    ecw_path = _download_ecw_cached(ecw_url, cache_dir)
+    print(f"Extracting orthophoto for {tile_id} from {ecw_path.name}...")
+
+    with rasterio.open(classmap_path) as cmap:
+        dst_crs = cmap.crs
+        dst_transform = cmap.transform
+        dst_width = cmap.width
+        dst_height = cmap.height
+        dst_bounds = cmap.bounds
+
+    with rasterio.open(ecw_path) as src:
+        left, bottom, right, top = rasterio.warp.transform_bounds(
+            dst_crs,
+            src.crs,
+            dst_bounds.left,
+            dst_bounds.bottom,
+            dst_bounds.right,
+            dst_bounds.top,
+        )
+        win = src.window(left, bottom, right, top)
+        src_data = src.read(window=win)
+        src_win_transform = src.window_transform(win)
+        src_crs = src.crs
+        band_count = src.count
+        is_uint16 = src.dtypes[0] == "uint16"
+
+    if is_uint16:
+        src_data = (src_data / 257).astype(np.uint8)
+    else:
+        src_data = src_data.astype(np.uint8)
+
+    dst_data = np.zeros((band_count, dst_height, dst_width), dtype=np.uint8)
+    rasterio.warp.reproject(
+        source=src_data,
+        destination=dst_data,
+        src_transform=src_win_transform,
+        src_crs=src_crs,
+        dst_transform=dst_transform,
+        dst_crs=dst_crs,
+        resampling=rasterio.enums.Resampling.bilinear,
+    )
+
+    with rasterio.open(
+        ortho_path,
+        "w",
+        driver="GTiff",
+        height=dst_height,
+        width=dst_width,
+        count=band_count,
+        dtype=np.uint8,
+        crs=dst_crs,
+        transform=dst_transform,
+        compress="lzw",
+    ) as dst:
+        dst.write(dst_data)
+
+    print(f"✓ Orthophoto saved: {ortho_path}")
+    return ortho_path
+
+
+def extract_ir_from_ecw(tile_id, ecw_url, reference_path, output_dir, cache_dir=None):
+    """Extract NIR band (band 3) from a [R, G, NIR] ECW ortho tile.
+
+    Args:
+        tile_id: Tile identifier.
+        ecw_url: URL of the 5km ECW ortho tile.
+        reference_path: Path to a raster whose CRS/bounds/shape to match.
+        output_dir: Directory to write the IR tile.
+        cache_dir: Directory for cached ECW files.
+
+    Returns:
+        Path to the IR GeoTIFF.
+    """
+    if cache_dir is None:
+        cache_dir = ECW_CACHE_DIR
+
+    ir_path = output_dir / f"{tile_id}_ir.tif"
+    if ir_path.exists():
+        return ir_path
+
+    ecw_path = _download_ecw_cached(ecw_url, cache_dir)
+    print(f"Extracting IR for {tile_id} from {ecw_path.name}...")
+
+    with rasterio.open(reference_path) as ref:
+        dst_crs = ref.crs
+        dst_transform = ref.transform
+        dst_width = ref.width
+        dst_height = ref.height
+        dst_bounds = ref.bounds
+
+    with rasterio.open(ecw_path) as src:
+        left, bottom, right, top = rasterio.warp.transform_bounds(
+            dst_crs,
+            src.crs,
+            dst_bounds.left,
+            dst_bounds.bottom,
+            dst_bounds.right,
+            dst_bounds.top,
+        )
+        win = src.window(left, bottom, right, top)
+        src_data = src.read(3, window=win)[np.newaxis, ...]
+        src_win_transform = src.window_transform(win)
+        src_crs = src.crs
+        is_uint16 = src.dtypes[2] == "uint16"
+
+    if is_uint16:
+        src_data = (src_data / 257).astype(np.uint8)
+    else:
+        src_data = src_data.astype(np.uint8)
+
+    dst_data = np.zeros((1, dst_height, dst_width), dtype=np.uint8)
+    rasterio.warp.reproject(
+        source=src_data,
+        destination=dst_data,
+        src_transform=src_win_transform,
+        src_crs=src_crs,
+        dst_transform=dst_transform,
+        dst_crs=dst_crs,
+        resampling=rasterio.enums.Resampling.bilinear,
+    )
+
+    with rasterio.open(
+        ir_path,
+        "w",
+        driver="GTiff",
+        height=dst_height,
+        width=dst_width,
+        count=1,
+        dtype=np.uint8,
+        crs=dst_crs,
+        transform=dst_transform,
+        compress="lzw",
+    ) as dst:
+        dst.write(dst_data)
+
+    print(f"✓ IR tile saved: {ir_path}")
+    return ir_path
 
 
 def extract_tile_name(url):
