@@ -14,7 +14,7 @@ def make_disk(radius):
     return ((X**2 + Y**2) <= radius**2).astype(np.uint8)
 
 
-def sieve_raster(input_path, output_path, threshold, connectedness=4):
+def sieve_raster(input_path, output_path, threshold, connectedness=8):
     print(f"Sieve filter (threshold={threshold} pixels, {connectedness}-connected)...")
 
     src_ds = gdal.Open(input_path)
