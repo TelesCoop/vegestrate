@@ -235,9 +235,9 @@ def main():
     parser.add_argument(
         "--r-er",
         type=int,
-        default=6,
+        default=0,
         metavar="N",
-        help="[Legacy] Erosion disk radius for morphological close (default: 6).",
+        help="[Legacy] Erosion disk radius for morphological close. Set > 0 to use instead of mode filter.",
     )
 
     args = parser.parse_args()
