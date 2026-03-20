@@ -5,16 +5,18 @@ from pathlib import Path
 
 def main():
     lidar_csv = Path("data/LIDAR2018.csv")
-    ortho_csv = Path("data/ortho_IR_2018.csv")
+    ortho_csv = Path(
+        "data/orthophotographie-infrarouge-2018-metropole-lyon-format-tiff.csv"
+    )
     manifest_path = Path("data/dataset_manifest_2018.json")
 
     ortho_lookup = {}
     with open(ortho_csv, encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
+        reader = csv.DictReader(f, delimiter=";")
         for row in reader:
             nom = row["nom"]
             x_str, y_str = nom.split("_")[:2]
-            ortho_lookup[(int(x_str), int(y_str))] = row["url"].strip()
+            ortho_lookup[(int(x_str), int(y_str))] = row["fichier_brut"].strip()
 
     all_tiles = []
     missing_ortho = 0
@@ -25,10 +27,8 @@ def main():
             url = row["url"].strip()
 
             x, y = map(int, tile_id.split("_"))
-            ortho_x = (x // 5) * 5
-            ortho_y = (y // 5) * 5
-            ortho_ecw_url = ortho_lookup.get((ortho_x, ortho_y))
-            if ortho_ecw_url is None:
+            ortho_tif_url = ortho_lookup.get((x, y))
+            if ortho_tif_url is None:
                 missing_ortho += 1
 
             entry = {
@@ -37,8 +37,8 @@ def main():
                 "classification_map": f"test/{tile_id}_classification_map.tif",
                 "url": url,
             }
-            if ortho_ecw_url:
-                entry["ortho_ecw_url"] = ortho_ecw_url
+            if ortho_tif_url:
+                entry["ortho_tif_url"] = ortho_tif_url
 
             all_tiles.append(entry)
 
