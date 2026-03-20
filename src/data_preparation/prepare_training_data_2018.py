@@ -56,7 +56,7 @@ def main():
     parser.add_argument(
         "--resolution",
         type=float,
-        default=0.8,
+        default=0.2,
     )
     parser.add_argument(
         "--workers",
