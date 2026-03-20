@@ -16,7 +16,7 @@ def main():
         for row in reader:
             nom = row["nom"]
             x_str, y_str = nom.split("_")[:2]
-            ortho_lookup[(int(x_str), int(y_str))] = row["fichier_brut"].strip()
+            ortho_lookup[(int(x_str), int(y_str))] = row["url"].strip()
 
     all_tiles = []
     missing_ortho = 0
