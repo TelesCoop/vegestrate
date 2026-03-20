@@ -141,7 +141,11 @@ def download_and_process_lidar(url, output_dir, resolution=0.2):
         print(f"✓ LiDAR data already exists: {laz_path}")
 
     print("Loading LAS data...")
-    las = laspy.read(str(laz_path))
+    try:
+        las = laspy.read(str(laz_path))
+    except Exception:
+        laz_path.unlink(missing_ok=True)
+        raise
     print(f"✓ Loaded {len(las.points):,} points")
 
     filtered_las = filter_ground_vegetation(las, lyon=True)
