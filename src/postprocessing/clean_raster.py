@@ -244,15 +244,16 @@ def main():
     use_morph = args.r_dil > 0
 
     print(f"{'=' * 70}")
-    print(f"  Sieve threshold: {args.sieve} pixels")
     if use_morph:
         print(
             f"  [Legacy] Morph close: dilate={args.r_dil}, erode={args.r_er}, dilate={args.r_dil}"
         )
+        print(f"  Sieve threshold: {args.sieve} pixels")
     else:
         print(
             f"  Mode filter: kernel={args.mode_kernel}x{args.mode_kernel}, iterations={args.mode_iterations}"
         )
+        print(f"  Sieve threshold: {args.sieve} pixels")
     print(f"{'=' * 70}\n")
 
     tmp_path = None
@@ -270,11 +271,11 @@ def main():
         if args.sieve > 0 and args.mode_kernel > 0:
             tmp_fd, tmp_path = tempfile.mkstemp(suffix=".tif")
             os.close(tmp_fd)
-            sieve_raster(args.input, tmp_path, args.sieve)
-            gc.collect()
             mode_filter_clean(
-                tmp_path, args.output, args.mode_kernel, args.mode_iterations
+                args.input, tmp_path, args.mode_kernel, args.mode_iterations
             )
+            gc.collect()
+            sieve_raster(tmp_path, args.output, args.sieve)
         elif args.sieve > 0:
             sieve_raster(args.input, args.output, args.sieve)
         elif args.mode_kernel > 0:
