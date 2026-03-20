@@ -32,7 +32,13 @@ def _download_ecw_cached(url, cache_dir):
     filename = url.split("/")[-1]
     cached = cache_dir / filename
     if cached.exists():
-        return cached
+        try:
+            with rasterio.open(cached):
+                pass
+            return cached
+        except Exception:
+            print(f"⚠ Cached ECW file is invalid, re-downloading: {cached.name}")
+            cached.unlink()
     tmp = cache_dir / f"{filename}.{os.getpid()}.tmp"
     download_file(url, str(tmp))
     if not cached.exists():
