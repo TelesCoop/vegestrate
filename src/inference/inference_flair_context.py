@@ -391,8 +391,16 @@ def process_tile_with_context(
         print("  ✗ Failed to create mosaic")
         return False
 
+    margin = tile_size
+    y0 = max(0, data_tile_size - margin)
+    x0 = max(0, data_tile_size - margin)
+    y1 = min(mosaic.shape[0], 2 * data_tile_size + margin)
+    x1 = min(mosaic.shape[1], 2 * data_tile_size + margin)
+    center_y = data_tile_size - y0
+    center_x = data_tile_size - x0
+
     class_map = model.segment_array(
-        image_data=mosaic,
+        image_data=mosaic[y0:y1, x0:x1],
         tile_size=tile_size,
         overlap=overlap,
         use_tta=use_tta,
@@ -403,8 +411,8 @@ def process_tile_with_context(
     )
 
     center_data = class_map[
-        data_tile_size : 2 * data_tile_size,
-        data_tile_size : 2 * data_tile_size,
+        center_y : center_y + data_tile_size,
+        center_x : center_x + data_tile_size,
     ]
 
     with rasterio.open(
