@@ -272,21 +272,26 @@ def phase_clean_raster(config: dict) -> bool:
             print(f"\n✗ Error: Final raster not found: {input_file}")
             return False
 
-        morph_ops = config["clean_raster"].get(
-            "morph_ops", [["dilate", 3], ["erode", 6], ["dilate", 3]]
-        )
-        r_dil, r_er = morph_ops[0][1], morph_ops[1][1]
+        cr = config["clean_raster"]
+        morph_ops = cr.get("morph_ops", [["dilate", 0], ["erode", 6], ["dilate", 0]])
+        r_dil = morph_ops[0][1]
+        r_er = morph_ops[1][1]
+        mode = cr.get("mode_filter", {})
         cmd_args = [
             "--input",
             input_file,
             "--output",
             output_file,
             "--sieve",
-            str(config["clean_raster"].get("sieve", 13)),
+            str(cr.get("sieve", 13)),
             "--r-dil",
             str(r_dil),
             "--r-er",
             str(r_er),
+            "--mode-kernel",
+            str(mode.get("kernel", 3)),
+            "--mode-iterations",
+            str(mode.get("iterations", 1)),
         ]
 
         if not run_module_main(
