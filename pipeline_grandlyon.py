@@ -1,4 +1,5 @@
 import argparse
+import glob
 import hashlib
 import json
 import sys
@@ -304,6 +305,70 @@ def phase_clean_raster(config: dict) -> bool:
     return True
 
 
+def phase_ndsm_merge(config: dict) -> bool:
+    output_name = config["pipeline"]["output_name"]
+    strategy = config.get("ndsm_merge", {}).get("strategy", "max")
+
+    for split in config["pipeline"]["splits"]:
+        ndsm_glob = f"data/{split}/ndsm_*.tif"
+        output_file = f"final_{output_name}_{split}_ndsm.tif"
+
+        if not glob.glob(ndsm_glob):
+            print(f"\n✗ Error: No ndsm_*.tif files found matching {ndsm_glob}")
+            return False
+
+        if not run_module_main(
+            "src.postprocessing.merge_tifs",
+            [
+                "--input",
+                ndsm_glob,
+                "--output",
+                output_file,
+                "--strategy",
+                strategy,
+            ],
+            f"PHASE ndsm_merge: Merge nDSM tiles for {split} split",
+        ):
+            return False
+
+    return True
+
+
+def phase_vegetation_elevation(config: dict) -> bool:
+    output_name = config["pipeline"]["output_name"]
+    nodata = str(config.get("vegetation_elevation", {}).get("nodata", -9999.0))
+
+    for split in config["pipeline"]["splits"]:
+        veg_file = _raster_for_split(output_name, split)
+        ndsm_file = f"final_{output_name}_{split}_ndsm.tif"
+        output_file = f"final_{output_name}_{split}_vegetation_elevation.tif"
+
+        if not Path(veg_file).exists():
+            print(f"\n✗ Error: Vegetation raster not found: {veg_file}")
+            return False
+        if not Path(ndsm_file).exists():
+            print(f"\n✗ Error: nDSM raster not found: {ndsm_file}")
+            return False
+
+        if not run_module_main(
+            "src.postprocessing.apply_vegetation_elevation",
+            [
+                "--veg",
+                veg_file,
+                "--ndsm",
+                ndsm_file,
+                "--output",
+                output_file,
+                "--nodata",
+                nodata,
+            ],
+            f"PHASE vegetation_elevation: Apply elevation mask for {split} split",
+        ):
+            return False
+
+    return True
+
+
 def phase_vectorization(config: dict) -> bool:
     try:
         from src.postprocessing.vectorize_raster import vectorize_raster
@@ -348,6 +413,8 @@ PHASE_FUNCS = {
     "lidar_flair_merge": phase_lidar_flair_merge,
     "final_merge": phase_final_merge,
     "clean_raster": phase_clean_raster,
+    "ndsm_merge": phase_ndsm_merge,
+    "vegetation_elevation": phase_vegetation_elevation,
     "vectorization": phase_vectorization,
 }
 
@@ -357,6 +424,8 @@ PHASE_ORDER = [
     "lidar_flair_merge",
     "final_merge",
     "clean_raster",
+    "ndsm_merge",
+    "vegetation_elevation",
     "vectorization",
 ]
 
@@ -366,6 +435,8 @@ BLOCKING_PHASES = {
     "lidar_flair_merge",
     "final_merge",
     "clean_raster",
+    "ndsm_merge",
+    "vegetation_elevation",
 }
 
 
@@ -402,6 +473,12 @@ def print_summary(config: dict, state: StateManager, elapsed: float) -> None:
             print(f"  Final {split} raster (cleaned): {clean_file}")
         elif Path(raw_file).exists():
             print(f"  Final {split} raster: {raw_file}")
+        ndsm_file = f"final_{output_name}_{split}_ndsm.tif"
+        if Path(ndsm_file).exists():
+            print(f"  Final {split} nDSM: {ndsm_file}")
+        elev_file = f"final_{output_name}_{split}_vegetation_elevation.tif"
+        if Path(elev_file).exists():
+            print(f"  Final {split} vegetation elevation: {elev_file}")
         vec_cfg = config["phases"].get("vectorization", False)
         vec_enabled = (
             vec_cfg.get("enabled", False) if isinstance(vec_cfg, dict) else vec_cfg
