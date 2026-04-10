@@ -3,6 +3,7 @@ from .common_lidar import (
     GROUND_CLASSIFICATION,
     LAS_CLASSIFICATIONS,
     create_classification_map,
+    create_ndsm,
     filter_ground_vegetation,
     print_classification_info,
 )
@@ -26,6 +27,7 @@ __all__ = [
     "GROUND_CLASSIFICATION",
     "LAS_CLASSIFICATIONS",
     "create_classification_map",
+    "create_ndsm",
     "filter_ground_vegetation",
     "print_classification_info",
     "load_manifest",

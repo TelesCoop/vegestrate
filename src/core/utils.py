@@ -94,7 +94,54 @@ def classification_to_raster(filtered_las, las, cell_size=0.2):
     return raster, affine_transform, crs
 
 
-def export_raster(data, filename, transform, crs=None):
+def points_to_ndsm(las, cell_size=0.2):
+    """Compute nDSM (height above ground) from LAS point cloud.
+
+    DSM = max z of all points per pixel.
+    DTM = max z of ground-only (class 2) points per pixel.
+    nDSM = max(DSM - DTM, 0). Nodata (-9999) where DTM is absent.
+
+    Returns:
+        ndsm: float32 array
+        affine_transform: rasterio affine transform
+        crs: coordinate reference system from the LAS file
+    """
+    NODATA = np.float32(-9999.0)
+
+    x = np.asarray(las.x)
+    y = np.asarray(las.y)
+    z = np.asarray(las.z, dtype=np.float32)
+    classifications = np.asarray(las.classification)
+
+    x_min, x_max = x.min(), x.max()
+    y_min, y_max = y.min(), y.max()
+
+    cols = int(np.ceil((x_max - x_min) / cell_size))
+    rows = int(np.ceil((y_max - y_min) / cell_size))
+
+    col_idx = np.clip(((x - x_min) / cell_size).astype(np.int32), 0, cols - 1)
+    row_idx = np.clip(((y_max - y) / cell_size).astype(np.int32), 0, rows - 1)
+
+    dsm = np.full((rows, cols), np.float32(-np.inf))
+    np.maximum.at(dsm, (row_idx, col_idx), z)
+
+    ground_mask = classifications == 2
+    dtm = np.full((rows, cols), np.float32(-np.inf))
+    if ground_mask.any():
+        np.maximum.at(dtm, (row_idx[ground_mask], col_idx[ground_mask]), z[ground_mask])
+
+    valid = np.isfinite(dsm) & np.isfinite(dtm)
+    ndsm = np.where(valid, np.maximum(dsm - dtm, np.float32(0.0)), NODATA).astype(
+        np.float32
+    )
+
+    affine_transform = transform.from_bounds(x_min, y_min, x_max, y_max, cols, rows)
+    crs = las.header.parse_crs() if hasattr(las.header, "parse_crs") else None
+
+    return ndsm, affine_transform, crs
+
+
+def export_raster(data, filename, transform, crs=None, nodata=None):
     """Export numpy array as GeoTIFF raster
 
     Args:
@@ -102,6 +149,7 @@ def export_raster(data, filename, transform, crs=None):
         filename: output filename
         transform: affine transform for georeferencing
         crs: coordinate reference system (defaults to EPSG:2154 if None)
+        nodata: nodata value to embed in the raster metadata
     """
     if crs is None:
         crs = "EPSG:2154"
@@ -115,5 +163,6 @@ def export_raster(data, filename, transform, crs=None):
         dtype=data.dtype,
         crs=crs,
         transform=transform,
+        nodata=nodata,
     ) as dst:
         dst.write(data, 1)
