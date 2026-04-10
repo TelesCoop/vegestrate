@@ -9,12 +9,22 @@ def apply_vegetation_elevation(veg_path, ndsm_path, output_path, nodata=-9999.0)
     with rasterio.open(veg_path) as veg_src:
         veg = veg_src.read(1)
         meta = veg_src.meta.copy()
+        veg_transform = veg_src.transform
+        veg_crs = veg_src.crs
 
     with rasterio.open(ndsm_path) as ndsm_src:
         ndsm = ndsm_src.read(1)
+        ndsm_transform = ndsm_src.transform
+        ndsm_crs = ndsm_src.crs
 
     if veg.shape != ndsm.shape:
         raise ValueError(f"Shape mismatch: vegetation {veg.shape} vs nDSM {ndsm.shape}")
+    if veg_crs != ndsm_crs:
+        raise ValueError(f"CRS mismatch: vegetation {veg_crs} vs nDSM {ndsm_crs}")
+    if not np.allclose(list(veg_transform)[:6], list(ndsm_transform)[:6], atol=1e-6):
+        raise ValueError(
+            f"Transform mismatch: vegetation {veg_transform} vs nDSM {ndsm_transform}"
+        )
 
     result = np.where(
         (veg > 0) & (ndsm != nodata),

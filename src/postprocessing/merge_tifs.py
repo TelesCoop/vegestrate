@@ -40,6 +40,8 @@ class TileMerger:
             raise ValueError(
                 f"Invalid merge strategy: {merge_strategy}. Must be one of {valid_strategies}"
             )
+        if merge_strategy == "max" and clip_values is not None:
+            raise ValueError("clip_values is not supported with the 'max' strategy")
         self.merge_strategy = merge_strategy
         self.nodata = nodata
         self.clip_values = clip_values
