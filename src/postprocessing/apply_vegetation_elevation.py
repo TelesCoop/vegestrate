@@ -1,42 +1,92 @@
 import argparse
+import gc
 import sys
 
 import numpy as np
-import rasterio
+from osgeo import gdal
 
 
-def apply_vegetation_elevation(veg_path, ndsm_path, output_path, nodata=-9999.0):
-    with rasterio.open(veg_path) as veg_src:
-        veg = veg_src.read(1)
-        meta = veg_src.meta.copy()
-        veg_transform = veg_src.transform
-        veg_crs = veg_src.crs
+def apply_vegetation_elevation(
+    veg_path, ndsm_path, output_path, nodata=-9999.0, block_size=4096
+):
+    veg_ds = gdal.Open(veg_path)
+    ndsm_ds = gdal.Open(ndsm_path)
 
-    with rasterio.open(ndsm_path) as ndsm_src:
-        ndsm = ndsm_src.read(1)
-        ndsm_transform = ndsm_src.transform
-        ndsm_crs = ndsm_src.crs
+    width = veg_ds.RasterXSize
+    height = veg_ds.RasterYSize
 
-    if veg.shape != ndsm.shape:
-        raise ValueError(f"Shape mismatch: vegetation {veg.shape} vs nDSM {ndsm.shape}")
-    if veg_crs != ndsm_crs:
-        raise ValueError(f"CRS mismatch: vegetation {veg_crs} vs nDSM {ndsm_crs}")
-    if not np.allclose(list(veg_transform)[:6], list(ndsm_transform)[:6], atol=1e-6):
+    if ndsm_ds.RasterXSize != width or ndsm_ds.RasterYSize != height:
         raise ValueError(
-            f"Transform mismatch: vegetation {veg_transform} vs nDSM {ndsm_transform}"
+            f"Shape mismatch: vegetation ({width}x{height}) vs nDSM ({ndsm_ds.RasterXSize}x{ndsm_ds.RasterYSize})"
         )
 
-    result = np.where(
-        (veg > 0) & (ndsm != nodata),
-        ndsm,
-        np.float32(nodata),
-    ).astype(np.float32)
+    veg_gt = veg_ds.GetGeoTransform()
+    ndsm_gt = ndsm_ds.GetGeoTransform()
+    if not np.allclose(veg_gt, ndsm_gt, atol=1e-6):
+        raise ValueError(f"Transform mismatch: vegetation {veg_gt} vs nDSM {ndsm_gt}")
 
-    meta.update(dtype="float32", nodata=nodata, count=1)
-    with rasterio.open(output_path, "w", **meta) as dst:
-        dst.write(result, 1)
+    driver = gdal.GetDriverByName("GTiff")
+    out_ds = driver.Create(
+        output_path,
+        width,
+        height,
+        1,
+        gdal.GDT_Float32,
+        options=["COMPRESS=DEFLATE", "TILED=YES", "BIGTIFF=YES"],
+    )
+    out_ds.SetGeoTransform(veg_gt)
+    out_ds.SetProjection(veg_ds.GetProjection())
+    out_band = out_ds.GetRasterBand(1)
+    out_band.SetNoDataValue(nodata)
 
-    veg_pixels = int(np.sum((veg > 0) & (ndsm != nodata)))
+    veg_band = veg_ds.GetRasterBand(1)
+    ndsm_band = ndsm_ds.GetRasterBand(1)
+
+    ndsm_nodata = ndsm_band.GetNoDataValue()
+    if ndsm_nodata is None:
+        ndsm_nodata = nodata
+
+    n_blocks_x = (width + block_size - 1) // block_size
+    n_blocks_y = (height + block_size - 1) // block_size
+    total = n_blocks_x * n_blocks_y
+    done = 0
+    veg_pixels = 0
+
+    for by in range(0, height, block_size):
+        for bx in range(0, width, block_size):
+            bw = min(block_size, width - bx)
+            bh = min(block_size, height - by)
+
+            veg_buf = veg_band.ReadRaster(bx, by, bw, bh, buf_type=gdal.GDT_Byte)
+            veg = np.frombuffer(veg_buf, dtype=np.uint8).reshape(bh, bw)
+
+            ndsm_buf = ndsm_band.ReadRaster(bx, by, bw, bh, buf_type=gdal.GDT_Float32)
+            ndsm = np.frombuffer(ndsm_buf, dtype=np.float32).reshape(bh, bw).copy()
+
+            mask = (veg > 0) & (ndsm != ndsm_nodata)
+            result = np.where(mask, ndsm, np.float32(nodata))
+            veg_pixels += int(np.sum(mask))
+
+            out_band.WriteRaster(
+                bx,
+                by,
+                bw,
+                bh,
+                result.astype(np.float32).tobytes(),
+                buf_type=gdal.GDT_Float32,
+            )
+
+            del veg, ndsm, result
+            done += 1
+            print(f"\r  Block {done}/{total}", end="", flush=True)
+
+    out_ds.FlushCache()
+    out_ds = None
+    veg_ds = None
+    ndsm_ds = None
+    gc.collect()
+    print()
+
     print(f"✓ Vegetation elevation saved: {output_path}")
     print(f"  Vegetation pixels with elevation: {veg_pixels:,}")
     return True
