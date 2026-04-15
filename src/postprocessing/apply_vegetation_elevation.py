@@ -15,15 +15,20 @@ def apply_vegetation_elevation(
     width = veg_ds.RasterXSize
     height = veg_ds.RasterYSize
 
-    if ndsm_ds.RasterXSize != width or ndsm_ds.RasterYSize != height:
-        raise ValueError(
-            f"Shape mismatch: vegetation ({width}x{height}) vs nDSM ({ndsm_ds.RasterXSize}x{ndsm_ds.RasterYSize})"
-        )
-
     veg_gt = veg_ds.GetGeoTransform()
     ndsm_gt = ndsm_ds.GetGeoTransform()
-    if not np.allclose(veg_gt, ndsm_gt, atol=1e-6):
-        raise ValueError(f"Transform mismatch: vegetation {veg_gt} vs nDSM {ndsm_gt}")
+
+    if not np.isclose(veg_gt[1], ndsm_gt[1], rtol=1e-6) or not np.isclose(
+        veg_gt[5], ndsm_gt[5], rtol=1e-6
+    ):
+        raise ValueError(
+            f"Pixel size mismatch: veg {veg_gt[1]},{veg_gt[5]} vs nDSM {ndsm_gt[1]},{ndsm_gt[5]}"
+        )
+
+    ndsm_off_x = round((veg_gt[0] - ndsm_gt[0]) / ndsm_gt[1])
+    ndsm_off_y = round((veg_gt[3] - ndsm_gt[3]) / ndsm_gt[5])
+    ndsm_width = ndsm_ds.RasterXSize
+    ndsm_height = ndsm_ds.RasterYSize
 
     driver = gdal.GetDriverByName("GTiff")
     out_ds = driver.Create(
@@ -60,8 +65,15 @@ def apply_vegetation_elevation(
             veg_buf = veg_band.ReadRaster(bx, by, bw, bh, buf_type=gdal.GDT_Byte)
             veg = np.frombuffer(veg_buf, dtype=np.uint8).reshape(bh, bw)
 
-            ndsm_buf = ndsm_band.ReadRaster(bx, by, bw, bh, buf_type=gdal.GDT_Float32)
-            ndsm = np.frombuffer(ndsm_buf, dtype=np.float32).reshape(bh, bw).copy()
+            nx = bx + ndsm_off_x
+            ny = by + ndsm_off_y
+            if nx < 0 or ny < 0 or nx + bw > ndsm_width or ny + bh > ndsm_height:
+                ndsm = np.full((bh, bw), ndsm_nodata, dtype=np.float32)
+            else:
+                ndsm_buf = ndsm_band.ReadRaster(
+                    nx, ny, bw, bh, buf_type=gdal.GDT_Float32
+                )
+                ndsm = np.frombuffer(ndsm_buf, dtype=np.float32).reshape(bh, bw).copy()
 
             mask = (veg > 0) & (ndsm != ndsm_nodata)
             result = np.where(mask, ndsm, np.float32(nodata))
