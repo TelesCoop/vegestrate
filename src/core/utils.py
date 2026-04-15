@@ -1,7 +1,7 @@
 import numpy as np
 import rasterio
 import requests
-from rasterio import transform
+from rasterio.transform import Affine
 
 # For IGN the mapping is 0-255
 CLASS_LABELS = {0: "ground", 63: "grass", 127: "hedge", 191: "trees", 255: "else"}
@@ -87,7 +87,7 @@ def classification_to_raster(filtered_las, las, cell_size=0.2):
 
     raster = np.argmax(counts, axis=0).astype(np.uint8)
 
-    affine_transform = transform.from_bounds(x_min, y_min, x_max, y_max, cols, rows)
+    affine_transform = Affine(cell_size, 0.0, x_min, 0.0, -cell_size, y_max)
 
     crs = las.header.parse_crs() if hasattr(las.header, "parse_crs") else None
 
@@ -131,11 +131,10 @@ def points_to_ndsm(las, cell_size=0.2):
         np.maximum.at(dtm, (row_idx[ground_mask], col_idx[ground_mask]), z[ground_mask])
 
     valid = np.isfinite(dsm) & np.isfinite(dtm)
-    ndsm = np.where(valid, np.maximum(dsm - dtm, np.float32(0.0)), NODATA).astype(
-        np.float32
-    )
+    diff = np.where(valid, dsm - dtm, np.float32(0.0))
+    ndsm = np.where(valid, np.maximum(diff, np.float32(0.0)), NODATA).astype(np.float32)
 
-    affine_transform = transform.from_bounds(x_min, y_min, x_max, y_max, cols, rows)
+    affine_transform = Affine(cell_size, 0.0, x_min, 0.0, -cell_size, y_max)
     crs = las.header.parse_crs() if hasattr(las.header, "parse_crs") else None
 
     return ndsm, affine_transform, crs

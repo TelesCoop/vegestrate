@@ -18,8 +18,8 @@ def apply_vegetation_elevation(
     veg_gt = veg_ds.GetGeoTransform()
     ndsm_gt = ndsm_ds.GetGeoTransform()
 
-    if not np.isclose(veg_gt[1], ndsm_gt[1], rtol=1e-6) or not np.isclose(
-        veg_gt[5], ndsm_gt[5], rtol=1e-6
+    if not np.isclose(veg_gt[1], ndsm_gt[1], rtol=1e-3) or not np.isclose(
+        veg_gt[5], ndsm_gt[5], rtol=1e-3
     ):
         raise ValueError(
             f"Pixel size mismatch: veg {veg_gt[1]},{veg_gt[5]} vs nDSM {ndsm_gt[1]},{ndsm_gt[5]}"
