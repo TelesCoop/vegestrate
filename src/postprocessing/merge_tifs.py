@@ -203,6 +203,7 @@ class TileMerger:
             "tiled": True,
             "blockxsize": 512,
             "blockysize": 512,
+            "BIGTIFF": "YES",
         }
 
         print(f"\nMosaic dimensions: {width} x {height} pixels")
