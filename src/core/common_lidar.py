@@ -121,6 +121,6 @@ def create_ndsm(las, output_path, resolution=0.2, crs="EPSG:2154"):
     print(f"Creating nDSM raster (resolution={resolution}m)...")
     ndsm, affine, las_crs = points_to_ndsm(las, cell_size=resolution)
     final_crs = las_crs if las_crs is not None else crs
-    export_raster(ndsm, str(output_path), affine, crs=final_crs, nodata=-9999.0)
+    export_raster(ndsm, str(output_path), affine, crs=final_crs, nodata=-9999)
     print(f"✓ Saved nDSM: {output_path}")
     return output_path

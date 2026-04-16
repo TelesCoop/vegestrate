@@ -106,7 +106,7 @@ def points_to_ndsm(las, cell_size=0.2):
         affine_transform: rasterio affine transform
         crs: coordinate reference system from the LAS file
     """
-    NODATA = np.float32(-9999.0)
+    NODATA = np.int16(-9999)
 
     x = np.asarray(las.x)
     y = np.asarray(las.y)
@@ -132,7 +132,8 @@ def points_to_ndsm(las, cell_size=0.2):
 
     valid = np.isfinite(dsm) & np.isfinite(dtm)
     diff = np.where(valid, dsm - dtm, np.float32(0.0))
-    ndsm = np.where(valid, np.maximum(diff, np.float32(0.0)), NODATA).astype(np.float32)
+    ndsm_f = np.where(valid, np.maximum(diff, np.float32(0.0)), np.float32(-9999.0))
+    ndsm = np.where(valid, np.round(ndsm_f).astype(np.int16), NODATA).astype(np.int16)
 
     affine_transform = Affine(cell_size, 0.0, x_min, 0.0, -cell_size, y_max)
     crs = las.header.parse_crs() if hasattr(las.header, "parse_crs") else None
@@ -140,7 +141,9 @@ def points_to_ndsm(las, cell_size=0.2):
     return ndsm, affine_transform, crs
 
 
-def export_raster(data, filename, transform, crs=None, nodata=None):
+def export_raster(
+    data, filename, transform, crs=None, nodata=None, compress="lzw", tiled=True
+):
     """Export numpy array as GeoTIFF raster
 
     Args:
@@ -149,9 +152,16 @@ def export_raster(data, filename, transform, crs=None, nodata=None):
         transform: affine transform for georeferencing
         crs: coordinate reference system (defaults to EPSG:2154 if None)
         nodata: nodata value to embed in the raster metadata
+        compress: compression algorithm passed to rasterio (default: "lzw", None to disable)
+        tiled: write internally tiled GeoTIFF for efficient windowed reads, e.g. WMS (default: True)
     """
     if crs is None:
         crs = "EPSG:2154"
+    creation_opts = {}
+    if compress:
+        creation_opts["compress"] = compress
+    if tiled:
+        creation_opts["tiled"] = True
     with rasterio.open(
         filename,
         "w",
@@ -163,5 +173,6 @@ def export_raster(data, filename, transform, crs=None, nodata=None):
         crs=crs,
         transform=transform,
         nodata=nodata,
+        **creation_opts,
     ) as dst:
         dst.write(data, 1)
