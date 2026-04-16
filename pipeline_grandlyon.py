@@ -209,6 +209,53 @@ def phase_lidar_flair_merge(config: dict) -> bool:
     return True
 
 
+def phase_zone_elevation(config: dict) -> bool:
+    from src.postprocessing.apply_vegetation_elevation import compute_zone_elevation
+
+    output_name = config["pipeline"]["output_name"]
+    nodata = config.get("vegetation_elevation", {}).get("nodata", -9999)
+
+    for split in config["pipeline"]["splits"]:
+        merged_dir = Path(f"merged_classifications_{output_name}/{split}")
+        ndsm_dir = Path(f"data/{split}")
+        zone_dir = Path(f"zone_elevation_{output_name}/{split}")
+        zone_dir.mkdir(parents=True, exist_ok=True)
+
+        merged_tiles = sorted(merged_dir.glob("merged_*.tif"))
+        if not merged_tiles:
+            print(f"\n✗ No merged classification tiles found in {merged_dir}")
+            return False
+
+        processed = 0
+        for veg_tile in merged_tiles:
+            coord_id = veg_tile.stem.replace("merged_", "")
+            ndsm_tile = ndsm_dir / f"ndsm_{coord_id}.tif"
+            if not ndsm_tile.exists():
+                print(f"  Skipping {coord_id}: no matching nDSM tile")
+                continue
+            zone_tile = zone_dir / f"zone_{coord_id}.tif"
+            print(f"  {coord_id}", flush=True)
+            compute_zone_elevation(
+                str(veg_tile), str(ndsm_tile), str(zone_tile), nodata
+            )
+            processed += 1
+
+        if processed == 0:
+            print(f"\n✗ No zone elevation tiles produced for {split} split")
+            return False
+
+        output_file = f"final_{output_name}_{split}_zone_elevation.tif"
+        zone_glob = str(zone_dir / "zone_*.tif")
+        if not run_module_main(
+            "src.postprocessing.merge_tifs",
+            ["--input", zone_glob, "--output", output_file, "--strategy", "max"],
+            f"PHASE zone_elevation: Merge zone tiles for {split} split",
+        ):
+            print(f"\n⚠ Warning: Zone elevation merge failed for {split} split")
+
+    return True
+
+
 def phase_final_merge(config: dict) -> bool:
     output_name = config["pipeline"]["output_name"]
     resolution = config["data"]["resolution"]
@@ -411,6 +458,7 @@ PHASE_FUNCS = {
     "data_preparation": phase_data_preparation,
     "flair_inference": phase_flair_inference,
     "lidar_flair_merge": phase_lidar_flair_merge,
+    "zone_elevation": phase_zone_elevation,
     "final_merge": phase_final_merge,
     "clean_raster": phase_clean_raster,
     "ndsm_merge": phase_ndsm_merge,
@@ -422,6 +470,7 @@ PHASE_ORDER = [
     "data_preparation",
     "flair_inference",
     "lidar_flair_merge",
+    "zone_elevation",
     "final_merge",
     "clean_raster",
     "ndsm_merge",
@@ -479,6 +528,9 @@ def print_summary(config: dict, state: StateManager, elapsed: float) -> None:
         elev_file = f"final_{output_name}_{split}_vegetation_elevation.tif"
         if Path(elev_file).exists():
             print(f"  Final {split} vegetation elevation: {elev_file}")
+        zone_file = f"final_{output_name}_{split}_zone_elevation.tif"
+        if Path(zone_file).exists():
+            print(f"  Final {split} zone elevation: {zone_file}")
         vec_cfg = config["phases"].get("vectorization", False)
         vec_enabled = (
             vec_cfg.get("enabled", False) if isinstance(vec_cfg, dict) else vec_cfg

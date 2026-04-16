@@ -62,6 +62,9 @@ phases:
   lidar_flair_merge:
     enabled: true
     depends_on: [data_preparation, flair_inference]
+  zone_elevation:
+    enabled: true
+    depends_on: [lidar_flair_merge]
   final_merge:
     enabled: true
     depends_on: [lidar_flair_merge]
