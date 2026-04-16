@@ -5,7 +5,7 @@ import argparse
 import tempfile
 import os
 import gc
-from scipy.ndimage import uniform_filter
+from scipy.ndimage import uniform_filter, median_filter, distance_transform_edt
 
 
 def make_disk(radius):
@@ -46,6 +46,96 @@ def _mode_filter_block(data, k, iterations):
             scores[c] = uniform_filter((result == c).astype(np.float32), size=k)
         result = np.argmax(scores, axis=0).astype(np.uint8)
     return result
+
+
+def median_filter_clean(input_path, output_path, kernel=3, block_size=4096):
+    print(f"Median filter (kernel={kernel}x{kernel})...")
+
+    src_ds = gdal.Open(input_path)
+    width = src_ds.RasterXSize
+    height = src_ds.RasterYSize
+    band = src_ds.GetRasterBand(1)
+    dtype = band.DataType
+    print(f"  Raster size: {width}x{height} pixels")
+
+    nodata = band.GetNoDataValue()
+    if nodata is None:
+        nodata = -9999.0
+    nodata_out = nodata
+
+    pad = kernel // 2
+
+    driver = gdal.GetDriverByName("GTiff")
+    out_ds = driver.Create(
+        output_path,
+        width,
+        height,
+        1,
+        dtype,
+        options=["COMPRESS=DEFLATE", "TILED=YES", "BIGTIFF=YES"],
+    )
+    out_ds.SetGeoTransform(src_ds.GetGeoTransform())
+    out_ds.SetProjection(src_ds.GetProjection())
+    out_band = out_ds.GetRasterBand(1)
+    out_band.SetNoDataValue(nodata_out)
+
+    n_blocks_x = (width + block_size - 1) // block_size
+    n_blocks_y = (height + block_size - 1) // block_size
+    total = n_blocks_x * n_blocks_y
+    done = 0
+
+    for by in range(0, height, block_size):
+        for bx in range(0, width, block_size):
+            bw = min(block_size, width - bx)
+            bh = min(block_size, height - by)
+
+            read_x = max(bx - pad, 0)
+            read_y = max(by - pad, 0)
+            read_x2 = min(bx + bw + pad, width)
+            read_y2 = min(by + bh + pad, height)
+            rw, rh = read_x2 - read_x, read_y2 - read_y
+
+            buf = band.ReadRaster(read_x, read_y, rw, rh, buf_type=gdal.GDT_Int16)
+            data = np.frombuffer(buf, dtype=np.int16).reshape(rh, rw).copy()
+
+            valid = data != int(nodata)
+
+            if not valid.any():
+                crop_x = bx - read_x
+                crop_y = by - read_y
+                tile_i16 = np.full((bh, bw), int(nodata_out), dtype=np.int16)
+                out_band.WriteRaster(
+                    bx, by, bw, bh, tile_i16.tobytes(), buf_type=gdal.GDT_Int16
+                )
+                del data, valid, tile_i16
+                done += 1
+                print(f"\r  Block {done}/{total}", end="", flush=True)
+                continue
+
+            data_f = data.astype(np.float32)
+            if not valid.all():
+                _, indices = distance_transform_edt(~valid, return_indices=True)
+                data_f[~valid] = data_f[indices[0][~valid], indices[1][~valid]]
+
+            filtered = median_filter(data_f, size=kernel)
+
+            crop_x = bx - read_x
+            crop_y = by - read_y
+            tile = filtered[crop_y : crop_y + bh, crop_x : crop_x + bw]
+            tile_i16 = np.ascontiguousarray(np.round(tile).astype(np.int16))
+            out_band.WriteRaster(
+                bx, by, bw, bh, tile_i16.tobytes(), buf_type=gdal.GDT_Int16
+            )
+
+            del data, data_f, valid, filtered, tile, tile_i16
+            done += 1
+            print(f"\r  Block {done}/{total}", end="", flush=True)
+
+    out_ds.FlushCache()
+    out_ds = None
+    src_ds = None
+    gc.collect()
+    print()
 
 
 def mode_filter_clean(input_path, output_path, kernel=3, iterations=1, block_size=4096):
@@ -226,6 +316,13 @@ def main():
         help="Number of mode filter passes (default: 1).",
     )
     parser.add_argument(
+        "--median-kernel",
+        type=int,
+        default=0,
+        metavar="N",
+        help="Median filter kernel size for continuous rasters (e.g. nDSM). Set > 0 to use. Nodata-aware.",
+    )
+    parser.add_argument(
         "--r-dil",
         type=int,
         default=0,
@@ -242,9 +339,14 @@ def main():
 
     args = parser.parse_args()
     use_morph = args.r_dil > 0
+    use_median = args.median_kernel > 0
 
     print(f"{'=' * 70}")
-    if use_morph:
+    if use_median:
+        print(
+            f"  Median filter: kernel={args.median_kernel}x{args.median_kernel} (nodata-aware)"
+        )
+    elif use_morph:
         print(
             f"  [Legacy] Morph close: dilate={args.r_dil}, erode={args.r_er}, dilate={args.r_dil}"
         )
@@ -258,7 +360,9 @@ def main():
 
     tmp_path = None
 
-    if use_morph:
+    if use_median:
+        median_filter_clean(args.input, args.output, args.median_kernel)
+    elif use_morph:
         if args.sieve > 0:
             tmp_fd, tmp_path = tempfile.mkstemp(suffix=".tif")
             os.close(tmp_fd)
