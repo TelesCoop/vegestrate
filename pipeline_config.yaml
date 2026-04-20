@@ -41,6 +41,12 @@ clean_raster: # postprocessing/clean_raster.py
     - [erode, 0]
     - [dilate, 0]
 
+ndsm_merge: # postprocessing/merge_tifs.py (nDSM tiles)
+  strategy: max
+
+vegetation_elevation: # postprocessing/apply_vegetation_elevation.py
+  nodata: -9999.0
+
 vectorization: # postprocessing/vectorize_raster.py
   format: ESRI Shapefile
   eight_connected: false
@@ -56,12 +62,21 @@ phases:
   lidar_flair_merge:
     enabled: true
     depends_on: [data_preparation, flair_inference]
+  zone_elevation:
+    enabled: true
+    depends_on: [lidar_flair_merge]
   final_merge:
     enabled: true
     depends_on: [lidar_flair_merge]
   clean_raster:
     enabled: true
     depends_on: [final_merge]
+  ndsm_merge:
+    enabled: true
+    depends_on: [data_preparation]
+  vegetation_elevation:
+    enabled: true
+    depends_on: [clean_raster, ndsm_merge]
   vectorization:
     enabled: false
     depends_on: [clean_raster]

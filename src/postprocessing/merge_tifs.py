@@ -35,11 +35,13 @@ class TileMerger:
             resolution_tolerance: Tolerance for resolution matching (default: 1e-3)
             resample_mismatch: Resample tiles with mismatched resolutions (default: False)
         """
-        valid_strategies = ["mode", "last"]
+        valid_strategies = ["mode", "last", "max"]
         if merge_strategy not in valid_strategies:
             raise ValueError(
                 f"Invalid merge strategy: {merge_strategy}. Must be one of {valid_strategies}"
             )
+        if merge_strategy == "max" and clip_values is not None:
+            raise ValueError("clip_values is not supported with the 'max' strategy")
         self.merge_strategy = merge_strategy
         self.nodata = nodata
         self.clip_values = clip_values
@@ -201,6 +203,7 @@ class TileMerger:
             "tiled": True,
             "blockxsize": 512,
             "blockysize": 512,
+            "BIGTIFF": "YES",
         }
 
         print(f"\nMosaic dimensions: {width} x {height} pixels")
@@ -406,6 +409,101 @@ class TileMerger:
                             f"    Processed {processed_blocks}/{total_blocks} blocks..."
                         )
 
+    def _merge_max_strategy(self, output_path: str, mosaic_meta: dict):
+        """Merge using 'max' strategy: highest value per pixel wins."""
+        print("  Using max strategy - processing block by block...")
+
+        block_size = 2048
+        height = mosaic_meta["height"]
+        width = mosaic_meta["width"]
+        nodata = mosaic_meta.get("nodata")
+        dtype = mosaic_meta["dtype"]
+
+        if nodata is not None:
+            init_val = nodata
+        elif np.issubdtype(np.dtype(dtype), np.floating):
+            init_val = np.finfo(np.dtype(dtype)).min
+        else:
+            init_val = np.iinfo(np.dtype(dtype)).min
+
+        total_blocks = ((height + block_size - 1) // block_size) * (
+            (width + block_size - 1) // block_size
+        )
+
+        with rasterio.open(output_path, "w", **mosaic_meta) as dst:
+            processed_blocks = 0
+
+            for row_start in range(0, height, block_size):
+                row_end = min(row_start + block_size, height)
+                block_height = row_end - row_start
+
+                for col_start in range(0, width, block_size):
+                    col_end = min(col_start + block_size, width)
+                    block_width = col_end - col_start
+
+                    result = np.full(
+                        (mosaic_meta["count"], block_height, block_width),
+                        init_val,
+                        dtype=dtype,
+                    )
+
+                    for tile in self.tiles_info:
+                        win = tile["window"]
+                        tile_row_end = win.row_off + win.height
+                        tile_col_end = win.col_off + win.width
+
+                        if (
+                            tile_row_end <= row_start
+                            or win.row_off >= row_end
+                            or tile_col_end <= col_start
+                            or win.col_off >= col_end
+                        ):
+                            continue
+
+                        ol_row_start = max(row_start, win.row_off)
+                        ol_row_end = min(row_end, tile_row_end)
+                        ol_col_start = max(col_start, win.col_off)
+                        ol_col_end = min(col_end, tile_col_end)
+
+                        data = self._read_and_resample_tile(tile)
+
+                        tile_sl_row = slice(
+                            ol_row_start - win.row_off, ol_row_end - win.row_off
+                        )
+                        tile_sl_col = slice(
+                            ol_col_start - win.col_off, ol_col_end - win.col_off
+                        )
+                        res_sl_row = slice(
+                            ol_row_start - row_start, ol_row_end - row_start
+                        )
+                        res_sl_col = slice(
+                            ol_col_start - col_start, ol_col_end - col_start
+                        )
+
+                        tile_data = data[:, tile_sl_row, tile_sl_col]
+                        if nodata is not None:
+                            valid = tile_data != nodata
+                            result[:, res_sl_row, res_sl_col] = np.where(
+                                valid,
+                                np.maximum(
+                                    result[:, res_sl_row, res_sl_col], tile_data
+                                ),
+                                result[:, res_sl_row, res_sl_col],
+                            )
+                        else:
+                            result[:, res_sl_row, res_sl_col] = np.maximum(
+                                result[:, res_sl_row, res_sl_col], tile_data
+                            )
+
+                    window = Window(col_start, row_start, block_width, block_height)
+                    dst.write(result, window=window)
+
+                    processed_blocks += 1
+                    if processed_blocks % 10 == 0:
+                        print(
+                            f"    Processed {processed_blocks}/{total_blocks} blocks..."
+                        )
+
     def merge_tiles(self, output_path: str, mosaic_meta: dict):
         """
         Merge tiles into output file.
@@ -420,6 +518,8 @@ class TileMerger:
             self._merge_last_strategy(output_path, mosaic_meta)
         elif self.merge_strategy == "mode":
             self._merge_mode_strategy(output_path, mosaic_meta)
+        elif self.merge_strategy == "max":
+            self._merge_max_strategy(output_path, mosaic_meta)
 
         print(f"\nMerge complete! Output saved to: {output_path}")
 
@@ -514,7 +614,7 @@ def main():
         "--input",
         "-i",
         default="merged_classifications/test",
-        help="Path input TIF files (default: merged_classifications/test)",
+        help="Directory containing TIF files, or glob pattern (e.g. 'data/test/ndsm_*.tif')",
     )
 
     parser.add_argument(
@@ -527,7 +627,7 @@ def main():
     parser.add_argument(
         "--strategy",
         "-s",
-        choices=["mode", "last"],
+        choices=["mode", "last", "max"],
         default="mode",
         help="Merge strategy for overlapping pixels (default: mode)",
     )
@@ -596,7 +696,10 @@ def main():
 
     args = parser.parse_args()
 
-    file_paths = sorted(glob.glob(args.input + "/*.tif"))
+    if "*" in args.input or "?" in args.input:
+        file_paths = sorted(glob.glob(args.input))
+    else:
+        file_paths = sorted(glob.glob(args.input + "/*.tif"))
 
     if not file_paths:
         print("Error: No files found matching pattern")

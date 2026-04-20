@@ -1,7 +1,7 @@
 import numpy as np
 import rasterio
 import requests
-from rasterio import transform
+from rasterio.transform import Affine
 
 # For IGN the mapping is 0-255
 CLASS_LABELS = {0: "ground", 63: "grass", 127: "hedge", 191: "trees", 255: "else"}
@@ -87,14 +87,63 @@ def classification_to_raster(filtered_las, las, cell_size=0.2):
 
     raster = np.argmax(counts, axis=0).astype(np.uint8)
 
-    affine_transform = transform.from_bounds(x_min, y_min, x_max, y_max, cols, rows)
+    affine_transform = Affine(cell_size, 0.0, x_min, 0.0, -cell_size, y_max)
 
     crs = las.header.parse_crs() if hasattr(las.header, "parse_crs") else None
 
     return raster, affine_transform, crs
 
 
-def export_raster(data, filename, transform, crs=None):
+def points_to_ndsm(las, cell_size=0.2):
+    """Compute nDSM (height above ground) from LAS point cloud.
+
+    DSM = max z of all points per pixel.
+    DTM = max z of ground-only (class 2) points per pixel.
+    nDSM = max(DSM - DTM, 0). Nodata (-9999) where DTM is absent.
+
+    Returns:
+        ndsm: float32 array
+        affine_transform: rasterio affine transform
+        crs: coordinate reference system from the LAS file
+    """
+    NODATA = np.int16(-9999)
+
+    x = np.asarray(las.x)
+    y = np.asarray(las.y)
+    z = np.asarray(las.z, dtype=np.float32)
+    classifications = np.asarray(las.classification)
+
+    x_min, x_max = x.min(), x.max()
+    y_min, y_max = y.min(), y.max()
+
+    cols = int(np.ceil((x_max - x_min) / cell_size))
+    rows = int(np.ceil((y_max - y_min) / cell_size))
+
+    col_idx = np.clip(((x - x_min) / cell_size).astype(np.int32), 0, cols - 1)
+    row_idx = np.clip(((y_max - y) / cell_size).astype(np.int32), 0, rows - 1)
+
+    dsm = np.full((rows, cols), np.float32(-np.inf))
+    np.maximum.at(dsm, (row_idx, col_idx), z)
+
+    ground_mask = classifications == 2
+    dtm = np.full((rows, cols), np.float32(-np.inf))
+    if ground_mask.any():
+        np.maximum.at(dtm, (row_idx[ground_mask], col_idx[ground_mask]), z[ground_mask])
+
+    valid = np.isfinite(dsm) & np.isfinite(dtm)
+    diff = np.where(valid, dsm - dtm, np.float32(0.0))
+    ndsm_f = np.where(valid, np.maximum(diff, np.float32(0.0)), np.float32(-9999.0))
+    ndsm = np.where(valid, np.round(ndsm_f).astype(np.int16), NODATA).astype(np.int16)
+
+    affine_transform = Affine(cell_size, 0.0, x_min, 0.0, -cell_size, y_max)
+    crs = las.header.parse_crs() if hasattr(las.header, "parse_crs") else None
+
+    return ndsm, affine_transform, crs
+
+
+def export_raster(
+    data, filename, transform, crs=None, nodata=None, compress="lzw", tiled=True
+):
     """Export numpy array as GeoTIFF raster
 
     Args:
@@ -102,9 +151,17 @@ def export_raster(data, filename, transform, crs=None):
         filename: output filename
         transform: affine transform for georeferencing
         crs: coordinate reference system (defaults to EPSG:2154 if None)
+        nodata: nodata value to embed in the raster metadata
+        compress: compression algorithm passed to rasterio (default: "lzw", None to disable)
+        tiled: write internally tiled GeoTIFF for efficient windowed reads, e.g. WMS (default: True)
     """
     if crs is None:
         crs = "EPSG:2154"
+    creation_opts = {}
+    if compress:
+        creation_opts["compress"] = compress
+    if tiled:
+        creation_opts["tiled"] = True
     with rasterio.open(
         filename,
         "w",
@@ -115,5 +172,7 @@ def export_raster(data, filename, transform, crs=None):
         dtype=data.dtype,
         crs=crs,
         transform=transform,
+        nodata=nodata,
+        **creation_opts,
     ) as dst:
         dst.write(data, 1)

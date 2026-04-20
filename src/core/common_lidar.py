@@ -1,7 +1,7 @@
 import laspy
 import numpy as np
 
-from .utils import classification_to_raster, export_raster
+from .utils import classification_to_raster, export_raster, points_to_ndsm
 
 CRS = "EPSG:2154"
 GROUND_CLASSIFICATION = 2
@@ -76,7 +76,7 @@ def filter_ground_vegetation(las, lyon=False):
 
 
 def create_classification_map(
-    filtred_las, las, output_path, resolution=0.8, crs="EPSG:2154"
+    filtred_las, las, output_path, resolution=0.2, crs="EPSG:2154"
 ):
     """Create and export classification raster from LAS data
 
@@ -84,7 +84,7 @@ def create_classification_map(
         filtred_las: laspy LAS object with only vegetation
         las: laspy LAS object with all all points
         output_path: Path to save classification_map.tif
-        resolution: Raster cell size in meters (default: 0.8)
+        resolution: Raster cell size in meters (default: 0.2)
         crs: Coordinate reference system (default: EPSG:2154)
 
     Returns:
@@ -100,4 +100,27 @@ def create_classification_map(
     export_raster(raster, str(output_path), affine, crs=final_crs)
     print(f"✓ Saved classification map: {output_path}")
 
+    return output_path
+
+
+def create_ndsm(las, output_path, resolution=0.2, crs="EPSG:2154"):
+    """Create and export nDSM raster from LAS data.
+
+    nDSM = DSM - DTM (height above ground). Ground class (2) defines the DTM.
+    Pixels where no ground point exists are set to nodata (-9999).
+
+    Args:
+        las: laspy LAS object with all points (unfiltered)
+        output_path: Path to save ndsm.tif
+        resolution: Raster cell size in meters (default: 0.2m)
+        crs: Coordinate reference system (default: EPSG:2154)
+
+    Returns:
+        Path to ndsm.tif
+    """
+    print(f"Creating nDSM raster (resolution={resolution}m)...")
+    ndsm, affine, las_crs = points_to_ndsm(las, cell_size=resolution)
+    final_crs = las_crs if las_crs is not None else crs
+    export_raster(ndsm, str(output_path), affine, crs=final_crs, nodata=-9999)
+    print(f"✓ Saved nDSM: {output_path}")
     return output_path

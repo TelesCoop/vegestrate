@@ -13,6 +13,7 @@ import rasterio.transform
 from src.core import (
     build_tile_list,
     create_classification_map,
+    create_ndsm,
     download_file,
     filter_ground_vegetation,
     load_manifest,
@@ -147,8 +148,11 @@ def download_and_process_lidar(url, output_dir, resolution=0.2):
     filtered_las = filter_ground_vegetation(las, lyon=True)
 
     classmap_path = output_dir / f"classification_map_{tile_name}.tif"
-
     create_classification_map(filtered_las, las, classmap_path, resolution=resolution)
+
+    ndsm_path = output_dir / f"ndsm_{tile_name}.tif"
+    create_ndsm(las, ndsm_path, resolution=resolution)
+
     os.remove(laz_path)
     return classmap_path
 
