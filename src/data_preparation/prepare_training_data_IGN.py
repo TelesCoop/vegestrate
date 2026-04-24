@@ -26,9 +26,10 @@ from pathlib import Path
 
 import laspy
 
-from ..core import (
+from src.core import (
     build_tile_list,
     create_classification_map,
+    create_ndsm,
     download_file,
     filter_ground_vegetation,
     load_manifest,
@@ -37,7 +38,7 @@ from ..core import (
     process_tiles_parallel,
     setup_split_directories,
 )
-from .fetch_wms_from_raster import fetch_wms_for_raster
+from fetch_wms_from_raster import fetch_wms_for_raster
 
 WMS_URL = "https://data.geopf.fr/wms-r"
 WMS_LAYER = "HR.ORTHOIMAGERY.ORTHOPHOTOS"
@@ -87,9 +88,10 @@ def download_and_process_lidar(url, output_dir, resolution=0.2):
     filtered_las = filter_ground_vegetation(las)
 
     classmap_path = output_dir / f"classification_map_{tile_id}.tif"
-    create_classification_map(
-        filtered_las, classmap_path, output_path=output_dir, resolution=resolution
-    )
+    create_classification_map(filtered_las, las, classmap_path, resolution=resolution)
+
+    ndsm_path = output_dir / f"ndsm_{tile_id}.tif"
+    create_ndsm(las, ndsm_path, resolution=resolution)
 
     return classmap_path
 

@@ -3,7 +3,7 @@ from io import BytesIO
 import rasterio
 import requests
 
-from core.common_ortho import resize_and_save
+from src.core.common_ortho import resize_and_save
 
 
 def fetch_wms_for_raster(

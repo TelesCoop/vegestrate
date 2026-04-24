@@ -73,7 +73,7 @@ def main():
     parser.add_argument(
         "--train",
         type=str,
-        default="data/dalles_train.txt",
+        default=None,
         help="File containing training LIDAR URLs (one per line)",
     )
     parser.add_argument(
@@ -94,24 +94,25 @@ def main():
     print("=" * 70)
     print("GENERATE DATASET MANIFEST FROM URL FILES")
     print("=" * 70)
-    print(f"Train URLs file: {args.train}")
+    print(f"Train URLs file: {args.train or '(none)'}")
     print(f"Test URLs file: {args.test}")
     print(f"Output manifest: {args.output}")
     print("=" * 70)
 
-    print("\nReading training URLs...")
-    train_urls = read_urls_from_file(args.train)
-    print(f"✓ Found {len(train_urls)} training URLs")
+    train_entries = []
+    if args.train is not None:
+        print("\nReading training URLs...")
+        train_urls = read_urls_from_file(args.train)
+        print(f"✓ Found {len(train_urls)} training URLs")
+        print("\nProcessing training URLs...")
+        for url in train_urls:
+            train_entries.append(create_manifest_entry(url, "train"))
+    else:
+        print("\nNo --train file provided, train section will be empty")
 
     print("Reading testing URLs...")
     test_urls = read_urls_from_file(args.test)
     print(f"✓ Found {len(test_urls)} testing URLs")
-
-    print("\nProcessing training URLs...")
-    train_entries = []
-    for url in train_urls:
-        entry = create_manifest_entry(url, "train")
-        train_entries.append(entry)
 
     print("\nProcessing testing URLs...")
     test_entries = []
