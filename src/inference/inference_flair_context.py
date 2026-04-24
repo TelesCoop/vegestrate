@@ -9,6 +9,9 @@ import rasterio
 from src.core import download_file, load_manifest
 from src.inference.flair_segmentation import FlairSegmentation
 
+CHECKPOINT_RGB_URL = "https://huggingface.co/IGNF/FLAIR-HUB_LC-A_RGB_swinlarge-upernet/resolve/main/FLAIR-HUB_LC-A_RGB_swinlarge-upernet.safetensors?download=true"
+CHECKPOINT_RGB_NAME = "FLAIR-HUB_LC-A_RGB_swinlarge-upernet.safetensors"
+
 CHECKPOINT_IR_URL = (
     "https://huggingface.co/IGNF/FLAIR-HUB_LC-A_IR_swinlarge-upernet/resolve/main/"
     "FLAIR-HUB_LC-A_IR_swinlarge-upernet.safetensors?download=true"
@@ -507,13 +510,13 @@ def parse_args():
     parser.add_argument(
         "--checkpoint",
         type=str,
-        default=CHECKPOINT_IR_NAME,
-        help="Path to FLAIR checkpoint (default: IR variant)",
+        default=None,
+        help="Path to FLAIR checkpoint (default: RGB or IR variant depending on --use_ir)",
     )
     parser.add_argument(
         "--download_checkpoint",
         action="store_true",
-        help="Download the IR checkpoint from HuggingFace if not present locally.",
+        help="Download the checkpoint from HuggingFace if not present locally.",
     )
     parser.add_argument(
         "--output_dir",
@@ -602,12 +605,18 @@ def main():
 
     manifest_path = Path(args.manifest)
     output_dir = Path(args.output_dir)
+
+    if args.checkpoint is None:
+        args.checkpoint = CHECKPOINT_IR_NAME if args.use_ir else CHECKPOINT_RGB_NAME
     checkpoint_path = Path(args.checkpoint)
 
+    checkpoint_url = CHECKPOINT_IR_URL if args.use_ir else CHECKPOINT_RGB_URL
     if not checkpoint_path.exists():
         if args.download_checkpoint:
-            print("Downloading IR checkpoint from HuggingFace...")
-            download_file(CHECKPOINT_IR_URL, str(checkpoint_path))
+            print(
+                f"Downloading {'IR' if args.use_ir else 'RGB'} checkpoint from HuggingFace..."
+            )
+            download_file(checkpoint_url, str(checkpoint_path))
             print(f"✓ Checkpoint saved to {checkpoint_path}")
         else:
             print(f"✗ Checkpoint not found: {checkpoint_path}")
