@@ -114,6 +114,9 @@ def run_module_main(module_path: str, args: list[str], description: str) -> bool
 
 
 def phase_data_preparation(config: dict) -> bool:
+    module = config["data"].get(
+        "module", "src.data_preparation.prepare_training_data_grandlyon"
+    )
     cmd_args = [
         "--manifest",
         config["data"]["manifest"],
@@ -127,7 +130,7 @@ def phase_data_preparation(config: dict) -> bool:
     if config["data"].get("download_ir", False):
         cmd_args.append("--download_ir")
     return run_module_main(
-        "src.data_preparation.prepare_training_data_grandlyon",
+        module,
         cmd_args,
         "PHASE 1: Data preparation (LiDAR + orthophotos)",
     )

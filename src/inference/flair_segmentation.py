@@ -253,7 +253,7 @@ class FlairSegmentation:
         if self.model is None:
             raise RuntimeError("Model not loaded")
 
-        with torch.cuda.amp.autocast("cuda", enabled=self.use_fp16):
+        with torch.cuda.amp.autocast(enabled=self.use_fp16):
             logits_tasks, _ = self.model(batch)
             logits = logits_tasks["AERIAL_LABEL-COSIA"]
 
