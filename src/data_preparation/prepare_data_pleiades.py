@@ -22,7 +22,6 @@ WMS_URL = "https://data.geopf.fr/wms-r"
 CRS = "EPSG:2154"
 
 PLEIADES_RGB_LAYER = "ORTHOIMAGERY.ORTHO-SAT.PLEIADES.{year}"
-PLEIADES_IRC_LAYER = "ORTHOIMAGERY.ORTHO-SAT.PLEIADES.{year}.IRC"
 
 
 def tile_id_to_bounds(tile_id, tile_step):
@@ -44,7 +43,7 @@ def fetch_wms_tile(bounds, width_px, height_px, layer_name):
         "BBOX": f"{xmin},{ymin},{xmax},{ymax}",
         "WIDTH": width_px,
         "HEIGHT": height_px,
-        "FORMAT": "image/jpeg",
+        "FORMAT": "image/png",
         "STYLES": "",
     }
     response = requests.get(WMS_URL, params=params, timeout=120)
@@ -89,37 +88,35 @@ def save_as_geotiff(arr, bounds, output_path):
 def process_tile(tile_step, resolution, year, use_ir, entry, output_dir):
     tile_id = entry["tile_id"]
     ortho_path = Path(output_dir) / f"{tile_id}_orthophoto.tif"
+    ir_path = Path(output_dir) / f"{tile_id}_ir.tif"
 
-    if not ortho_path.exists():
+    needs_ortho = not ortho_path.exists()
+    needs_ir = use_ir and not ir_path.exists()
+
+    if needs_ortho or needs_ir:
         bounds = tile_id_to_bounds(tile_id, tile_step)
         step_m = tile_step * 100.0
         px = int(step_m / resolution)
 
         layer = PLEIADES_RGB_LAYER.format(year=year)
         img_bytes = fetch_wms_tile(bounds, px, px, layer)
-        arr = np.array(Image.open(BytesIO(img_bytes)).convert("RGB"))
-        save_as_geotiff(arr, bounds, ortho_path)
-        print(f"  ✓ {ortho_path.name}")
+        arr = np.array(Image.open(BytesIO(img_bytes)))
+
+        if needs_ortho:
+            rgb = arr[:, :, :3] if arr.ndim == 3 else arr
+            save_as_geotiff(rgb, bounds, ortho_path)
+            print(f"  ✓ {ortho_path.name}")
+
+        if needs_ir:
+            ir_band = (
+                arr[:, :, 3] if arr.ndim == 3 and arr.shape[2] == 4 else arr[:, :, 0]
+            )
+            save_as_geotiff(ir_band.astype(np.uint8), bounds, ir_path)
+            print(f"  ✓ {ir_path.name}")
     else:
-        print(f"  ⏭ {ortho_path.name}")
-
-    if use_ir:
-        ir_path = Path(output_dir) / f"{tile_id}_ir.tif"
-        if not ir_path.exists():
-            try:
-                bounds = tile_id_to_bounds(tile_id, tile_step)
-                step_m = tile_step * 100.0
-                px = int(step_m / resolution)
-
-                irc_layer = PLEIADES_IRC_LAYER.format(year=year)
-                irc_bytes = fetch_wms_tile(bounds, px, px, irc_layer)
-                irc_arr = np.array(Image.open(BytesIO(irc_bytes)))
-                ir_band = irc_arr[:, :, 0] if irc_arr.ndim == 3 else irc_arr
-                save_as_geotiff(ir_band.astype(np.uint8), bounds, ir_path)
-                print(f"  ✓ {ir_path.name}")
-            except Exception as e:
-                print(f"  WARNING: IR fetch failed for {tile_id}: {e}")
-        else:
+        if not needs_ortho:
+            print(f"  ⏭ {ortho_path.name}")
+        if use_ir and not needs_ir:
             print(f"  ⏭ {ir_path.name}")
 
     return {"tile_id": tile_id, "status": "success"}
