@@ -30,9 +30,9 @@ def main():
         "--bbox",
         type=float,
         nargs=4,
-        default=[820000, 6490000, 880000, 6560000],
+        default=[840000, 6514000, 852000, 6523000],
         metavar=("XMIN", "YMIN", "XMAX", "YMAX"),
-        help="Bounding box in Lambert 93 (EPSG:2154) meters (default: Métropole de Lyon)",
+        help="Bounding box in Lambert 93 (EPSG:2154) meters (default: Lyon city center + Villeurbanne)",
     )
     parser.add_argument(
         "--tile_step",
