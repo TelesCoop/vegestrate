@@ -56,7 +56,7 @@ def fetch_wms_tile(bounds, width_px, height_px, layer_name):
     return response.content
 
 
-def save_as_geotiff(arr, bounds, output_path):
+def save_as_geotiff(arr, bounds, output_path, nodata=None):
     xmin, ymin, xmax, ymax = bounds
     if arr.ndim == 2:
         height, width = arr.shape
@@ -77,6 +77,7 @@ def save_as_geotiff(arr, bounds, output_path):
         crs=CRS,
         transform=transform,
         compress="lzw",
+        nodata=nodata,
     ) as dst:
         if count == 1:
             dst.write(arr if arr.ndim == 2 else arr[:, :, 0], 1)
@@ -102,16 +103,33 @@ def process_tile(tile_step, resolution, year, use_ir, entry, output_dir):
         img_bytes = fetch_wms_tile(bounds, px, px, layer)
         arr = np.array(Image.open(BytesIO(img_bytes)))
 
+        if arr.ndim == 3 and arr.shape[2] == 4:
+            alpha = arr[:, :, 3]
+            valid_mask = alpha > 0
+            if valid_mask.sum() == 0:
+                print(f"  ✗ {tile_id}: no satellite coverage")
+                return {"tile_id": tile_id, "status": "no_coverage"}
+            if arr[valid_mask, :3].max() == 0:
+                print(
+                    f"  ✗ {tile_id}: zero-value pixels (year {year} may lack data here)"
+                )
+                return {"tile_id": tile_id, "status": "invalid_data"}
+
         if needs_ortho:
-            rgb = arr[:, :, :3] if arr.ndim == 3 else arr
-            save_as_geotiff(rgb, bounds, ortho_path)
+            if arr.ndim == 3 and arr.shape[2] == 4:
+                rgb = arr[:, :, :3].copy()
+                rgb[arr[:, :, 3] == 0] = 0
+            else:
+                rgb = arr[:, :, :3] if arr.ndim == 3 else arr
+            save_as_geotiff(rgb, bounds, ortho_path, nodata=0)
             print(f"  ✓ {ortho_path.name}")
 
         if needs_ir:
-            ir_band = (
-                arr[:, :, 3] if arr.ndim == 3 and arr.shape[2] == 4 else arr[:, :, 0]
-            )
-            save_as_geotiff(ir_band.astype(np.uint8), bounds, ir_path)
+            ir_layer = f"ORTHOIMAGERY.ORTHOPHOTOS.IRC.{year}"
+            ir_bytes = fetch_wms_tile(bounds, px, px, ir_layer)
+            ir_arr = np.array(Image.open(BytesIO(ir_bytes)))
+            ir_band = ir_arr[:, :, 0] if ir_arr.ndim == 3 else ir_arr
+            save_as_geotiff(ir_band.astype(np.uint8), bounds, ir_path, nodata=0)
             print(f"  ✓ {ir_path.name}")
     else:
         if not needs_ortho:
@@ -135,8 +153,8 @@ def main():
     parser.add_argument(
         "--year",
         type=int,
-        required=True,
-        help="Pléiades year to fetch (e.g. 2023)",
+        default=2025,
+        help="Pléiades year to fetch",
     )
     parser.add_argument(
         "--resolution",
