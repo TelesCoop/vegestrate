@@ -1,7 +1,32 @@
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures.process import BrokenProcessPool
 from typing import Callable
 
 import humanize
+
+
+def _future_outcome(future, tile_id, attempts, max_retries):
+    """Resolve a finished future to (result_dict, requeue).
+
+    requeue is True only when a worker death is still within the retry budget,
+    in which case result_dict is None and the tile should be run again.
+    """
+    try:
+        return future.result(), False
+    except BrokenProcessPool:
+        attempts[tile_id] = attempts.get(tile_id, 0) + 1
+        if attempts[tile_id] <= max_retries:
+            return None, True
+        return {
+            "tile_id": tile_id,
+            "status": "failed",
+            "error": (
+                f"worker process killed {attempts[tile_id]} times "
+                "(likely out of memory); giving up"
+            ),
+        }, False
+    except Exception as e:
+        return {"tile_id": tile_id, "status": "failed", "error": str(e)}, False
 
 
 def process_tiles_parallel(
@@ -9,14 +34,23 @@ def process_tiles_parallel(
     process_func: Callable,
     max_workers: int = 4,
     verbose: bool = True,
+    max_retries: int = 2,
 ) -> tuple[list[dict], list[dict]]:
     """Process tiles in parallel using ProcessPoolExecutor.
+
+    A worker that is killed abruptly (e.g. by the OOM killer) breaks the whole
+    pool: every in-flight future then raises BrokenProcessPool. To keep one death
+    from losing the entire run, tiles already finished are kept and the in-flight
+    tiles are requeued into a fresh pool. Each retry round halves the worker count
+    so a memory-heavy or poison tile eventually runs isolated (1 worker) and fails
+    on its own instead of taking the batch down.
 
     Args:
         all_tiles: List of tuples (entry, output_dir, split_name)
         process_func: Function to process single tile (entry, output_dir) -> result dict
         max_workers: Number of parallel workers
         verbose: Print progress messages
+        max_retries: How many times a tile may be requeued after a worker death
 
     Returns:
         Tuple of (successful_results, failed_results)
@@ -27,30 +61,54 @@ def process_tiles_parallel(
         print(f"\nProcessing {total_tiles} tiles with {max_workers} workers...")
 
     results = []
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        future_to_tile = {
-            executor.submit(process_func, entry, output_dir): (entry["tile_id"], split)
-            for entry, output_dir, split in all_tiles
-        }
+    completed = 0
+    attempts: dict = {}
+    pending = list(all_tiles)
+    round_idx = 0
 
-        completed = 0
-        for future in as_completed(future_to_tile):
-            tile_id, split = future_to_tile[future]
-            completed += 1
+    while pending:
+        batch = pending
+        pending = []
+        round_workers = max(1, max_workers >> round_idx)
+        if round_idx and verbose:
+            print(
+                f"\nRetry round {round_idx}: re-running {len(batch)} tile(s) "
+                f"with {round_workers} worker(s)..."
+            )
 
-            try:
-                result = future.result()
-                results.append(result)
-                status = "✓" if result["status"] == "success" else "✗"
-                if verbose:
-                    print(f"[{completed}/{total_tiles}] {status} {split:5s} {tile_id}")
-            except Exception as e:
-                if verbose:
-                    print(f"[{completed}/{total_tiles}] ✗ {split:5s} {tile_id}")
-                    print(f"  Error: {e}")
-                results.append(
-                    {"tile_id": tile_id, "status": "failed", "error": str(e)}
+        executor = ProcessPoolExecutor(max_workers=round_workers)
+        try:
+            future_to_tile = {
+                executor.submit(process_func, entry, output_dir): (
+                    entry,
+                    output_dir,
+                    split,
                 )
+                for entry, output_dir, split in batch
+            }
+
+            for future in as_completed(future_to_tile):
+                entry, output_dir, split = future_to_tile[future]
+                tile_id = entry["tile_id"]
+
+                result, requeue = _future_outcome(
+                    future, tile_id, attempts, max_retries
+                )
+                if requeue:
+                    pending.append((entry, output_dir, split))
+                    continue
+
+                completed += 1
+                results.append(result)
+                if verbose:
+                    status = "✓" if result["status"] == "success" else "✗"
+                    print(f"[{completed}/{total_tiles}] {status} {split:5s} {tile_id}")
+                    if result["status"] == "failed":
+                        print(f"  Error: {result.get('error', 'Unknown')}")
+        finally:
+            executor.shutdown(wait=False)
+
+        round_idx += 1
 
     successes = [r for r in results if r["status"] == "success"]
     failures = [r for r in results if r["status"] == "failed"]

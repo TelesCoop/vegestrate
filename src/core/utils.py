@@ -2,6 +2,32 @@ import numpy as np
 import rasterio
 import requests
 from rasterio.transform import Affine
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+
+def retry_session(total=5, backoff_factor=2):
+    """A requests Session that retries on connection errors and 5xx/429.
+
+    backoff_factor=2 → waits 0, 2, 4, 8, 16s between attempts (urllib3 caps at 120s),
+    which lets an overloaded GeoServer recover instead of failing the whole tile.
+    """
+    retry = Retry(
+        total=total,
+        connect=total,
+        read=total,
+        status=total,
+        backoff_factor=backoff_factor,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=("GET",),
+        raise_on_status=False,
+    )
+    session = requests.Session()
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
 
 # For IGN the mapping is 0-255
 CLASS_LABELS = {0: "ground", 63: "grass", 127: "hedge", 191: "trees", 255: "else"}
@@ -20,7 +46,7 @@ CLASS_TO_SIMPLIFIED = {
 def download_file(url, filename):
     """Download a file from a URL"""
     try:
-        response = requests.get(url, stream=True)
+        response = retry_session().get(url, stream=True, timeout=(30, 300))
         response.raise_for_status()
 
         if not filename:

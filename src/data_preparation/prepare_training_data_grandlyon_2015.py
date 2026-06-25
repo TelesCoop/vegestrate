@@ -9,7 +9,6 @@ from pathlib import Path
 import laspy
 import numpy as np
 import rasterio
-import requests
 from rasterio.transform import from_bounds
 
 from src.core import (
@@ -21,6 +20,7 @@ from src.core import (
     load_manifest,
     print_processing_summary,
     process_tiles_parallel,
+    retry_session,
     setup_split_directories,
 )
 
@@ -119,7 +119,7 @@ def fetch_wcs_block(coverage_id, left, bottom, right, top, px_w, px_h):
         "subset": [f"X({left},{right})", f"Y({bottom},{top})"],
         "scaleSize": f"i({px_w}),j({px_h})",
     }
-    resp = requests.get(WCS_URL, params=params, timeout=300)
+    resp = retry_session().get(WCS_URL, params=params, timeout=(30, 300))
     resp.raise_for_status()
     if "tif" not in resp.headers.get("Content-Type", "").lower():
         raise RuntimeError(f"WCS error for {coverage_id}: {resp.text[:300]}")
@@ -214,7 +214,7 @@ def main():
         default="data/dataset_manifest_grandlyon_2015.json",
     )
     parser.add_argument("--resolution", type=float, default=0.2)
-    parser.add_argument("--workers", type=int, default=14)
+    parser.add_argument("--workers", type=int, default=6)
     parser.add_argument("--self-check", action="store_true")
     args = parser.parse_args()
 

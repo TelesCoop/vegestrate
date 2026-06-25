@@ -20,6 +20,7 @@ from .utils import (
     classification_to_raster,
     download_file,
     export_raster,
+    retry_session,
 )
 
 __all__ = [
@@ -42,4 +43,5 @@ __all__ = [
     "classification_to_raster",
     "download_file",
     "export_raster",
+    "retry_session",
 ]
