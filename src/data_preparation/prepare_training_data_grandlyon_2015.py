@@ -35,20 +35,39 @@ def extract_tile_name(url):
 
 
 def extract_pointcloud(zip_path, output_dir):
+    targets = []
     with zipfile.ZipFile(zip_path) as zf:
         members = [n for n in zf.namelist() if n.lower().endswith((".laz", ".las"))]
-        # ponytail: one cloud per tile zip (matches the assemblage grid); fan out if that ever breaks
-        if len(members) != 1:
-            raise RuntimeError(
-                f"expected one point-cloud file in {zip_path.name}, found {members}"
-            )
-        target = output_dir / Path(members[0]).name
-        with zf.open(members[0]) as src, open(target, "wb") as dst:
-            shutil.copyfileobj(src, dst)
-    return target
+        if not members:
+            raise RuntimeError(f"no point-cloud file in {zip_path.name}")
+        for member in members:
+            target = output_dir / Path(member).name
+            with zf.open(member) as src, open(target, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            targets.append(target)
+    return targets
 
 
-def download_and_process_lidar(url, output_dir, resolution=0.2):
+def merge_pointclouds(paths):
+    clouds = [laspy.read(str(p)) for p in paths]
+    if len(clouds) == 1:
+        return clouds[0]
+    xs = np.concatenate([c.x for c in clouds])
+    ys = np.concatenate([c.y for c in clouds])
+    zs = np.concatenate([c.z for c in clouds])
+    cls = np.concatenate([np.asarray(c.classification) for c in clouds])
+    header = clouds[0].header
+    merged = laspy.LasData(
+        header, laspy.PackedPointRecord.zeros(len(xs), header.point_format)
+    )
+    merged.x = xs
+    merged.y = ys
+    merged.z = zs
+    merged.classification = cls
+    return merged
+
+
+def download_and_process_lidar(url, output_dir, resolution=0.8):
     tile_name = extract_tile_name(url)
     zip_path = output_dir / f"{tile_name}.zip"
 
@@ -63,10 +82,10 @@ def download_and_process_lidar(url, output_dir, resolution=0.2):
     else:
         print(f"✓ LiDAR data already exists: {zip_path}")
 
-    laz_path = extract_pointcloud(zip_path, output_dir)
+    laz_paths = extract_pointcloud(zip_path, output_dir)
 
-    print("Loading LAS data...")
-    las = laspy.read(str(laz_path))
+    print(f"Loading LAS data ({len(laz_paths)} sub-tiles)...")
+    las = merge_pointclouds(laz_paths)
     print(f"✓ Loaded {len(las.points):,} points")
 
     filtered_las = filter_ground_vegetation(las, lyon=True)
@@ -78,7 +97,8 @@ def download_and_process_lidar(url, output_dir, resolution=0.2):
     create_ndsm(las, ndsm_path, resolution=resolution)
 
     zip_path.unlink()
-    laz_path.unlink()
+    for laz_path in laz_paths:
+        laz_path.unlink()
     return classmap_path
 
 
@@ -112,7 +132,7 @@ def fetch_wcs_block(coverage_id, left, bottom, right, top, px_w, px_h):
     return data[:3]
 
 
-def fetch_wcs_for_raster(reference_raster, output_path, coverage_id, resolution=0.2):
+def fetch_wcs_for_raster(reference_raster, output_path, coverage_id, resolution=0.8):
     """Mosaic a WCS coverage onto the exact grid of a reference raster.
 
     The 5 km source dalles are decoded server-side (no local ECW driver), so each
@@ -245,6 +265,33 @@ def _self_check():
             assert 0 < bh <= MAX_BLOCK_PX and 0 < bw <= MAX_BLOCK_PX
             assert row + bh <= height and col + bw <= width
     print("✓ iter_blocks self-check passed")
+
+    def _make_cloud(x0, y0):
+        header = laspy.LasHeader(point_format=3, version="1.4")
+        header.offsets = [x0, y0, 0.0]
+        header.scales = [0.01, 0.01, 0.01]
+        las = laspy.LasData(
+            header, laspy.PackedPointRecord.zeros(3, header.point_format)
+        )
+        las.x = [x0, x0 + 1, x0 + 2]
+        las.y = [y0, y0 + 1, y0 + 2]
+        las.z = [10.0, 11.0, 12.0]
+        las.classification = [2, 3, 5]
+        return las
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        paths = []
+        for i, (x0, y0) in enumerate([(1000.0, 5000.0), (2000.0, 6000.0)]):
+            p = Path(tmp) / f"c{i}.laz"
+            _make_cloud(x0, y0).write(str(p))
+            paths.append(p)
+        merged = merge_pointclouds(paths)
+        assert len(merged.points) == 6, len(merged.points)
+        assert np.isclose(merged.x.max(), 2002.0), merged.x.max()
+        assert sorted(np.unique(merged.classification)) == [2, 3, 5]
+    print("✓ merge_pointclouds self-check passed")
 
 
 if __name__ == "__main__":
