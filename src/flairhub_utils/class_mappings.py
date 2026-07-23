@@ -31,6 +31,15 @@ SIMPLIFIED_CLASSES = {
     3: "trees",  # Trees (deciduous, coniferous, mixed)
 }
 
+TRANSPARENT_CLASS = 0
+
+SIMPLIFIED_COLORS = {
+    0: (0, 0, 0, 0),  # else -> fully transparent
+    1: (166, 219, 108, 255),  # herbaceous -> yellow-green
+    2: (49, 163, 84, 255),  # hedge -> medium green
+    3: (0, 90, 50, 255),  # trees -> dark green
+}
+
 # Mapping from 19 FLAIR classes to 4 simplified classes
 CLASS_REMAP_19_TO_4 = {
     0: 0,  # building -> else
@@ -88,6 +97,19 @@ def get_class_name(class_id: int, simplified: bool = True) -> str:
         return SIMPLIFIED_CLASSES.get(class_id, "unknown")
     else:
         return FLAIR_CLASSES.get(class_id, "unknown")
+
+
+def get_class_color(class_id: int) -> tuple[int, int, int, int]:
+    """
+    Get the (R, G, B, A) display color of a simplified class.
+
+    Args:
+        class_id: Simplified class ID (0-3)
+
+    Returns:
+        RGBA tuple; unknown classes and TRANSPARENT_CLASS are fully transparent
+    """
+    return SIMPLIFIED_COLORS.get(class_id, (0, 0, 0, 0))
 
 
 def list_classes(simplified: bool = True) -> dict[int, str]:

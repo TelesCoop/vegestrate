@@ -1,17 +1,85 @@
-from osgeo import gdal
+from osgeo import gdal, gdal_array, osr
 import numpy as np
 import cv2
 import argparse
+import importlib.util
+import shutil
 import tempfile
 import os
 import gc
+from pathlib import Path
 from scipy.ndimage import uniform_filter, median_filter, distance_transform_edt
+
+
+def _load_class_mappings():
+    """Load class_mappings by path: importing the package would pull in torch."""
+    path = Path(__file__).resolve().parents[1] / "flairhub_utils" / "class_mappings.py"
+    spec = importlib.util.spec_from_file_location("class_mappings", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_CLASSES = _load_class_mappings()
+SIMPLIFIED_COLORS = _CLASSES.SIMPLIFIED_COLORS
+TRANSPARENT_CLASS = _CLASSES.TRANSPARENT_CLASS
+
+# gdal.TermProgress is a raw C function pointer in recent bindings and is rejected
+# by callback= ("Object given is not a Python function"); _nocb is the callable one.
+TERM_PROGRESS = getattr(gdal, "TermProgress_nocb", None)
 
 
 def make_disk(radius):
     L = np.arange(-radius, radius + 1)
     X, Y = np.meshgrid(L, L)
     return ((X**2 + Y**2) <= radius**2).astype(np.uint8)
+
+
+def class_color_table():
+    ct = gdal.ColorTable()
+    for value, rgba in SIMPLIFIED_COLORS.items():
+        ct.SetColorEntry(int(value), tuple(int(c) for c in rgba))
+    return ct
+
+
+def set_class_palette(band):
+    """Attach the simplified-class palette to a freshly created Byte band."""
+    if band.DataType != gdal.GDT_Byte:
+        return
+    band.SetRasterColorTable(class_color_table())
+    band.SetRasterColorInterpretation(gdal.GCI_PaletteIndex)
+
+
+def apply_class_transparency(path):
+    """
+    Make the "else" class transparent in the final classification raster.
+
+    TIFF colormaps cannot store an alpha channel, so transparency is carried by
+    the nodata value — that is what QGIS and web viewers honour. Only ever call
+    this on the final output: SieveFilter and Polygonize both fall back to the
+    band's nodata mask, so tagging intermediates would exclude class 0 pixels
+    from those steps.
+    """
+    ds = gdal.Open(path, gdal.GA_Update)
+    if ds is None:
+        print(f"  ⚠ Could not open {path} to set transparency")
+        return
+    band = ds.GetRasterBand(1)
+    band.SetNoDataValue(float(TRANSPARENT_CLASS))
+    if band.GetRasterColorTable() is None:
+        # Our writers set it at creation time; a plain CreateCopy of a palette-less
+        # input has none, and GTiff cannot always add one after the fact.
+        try:
+            failed = band.SetRasterColorTable(class_color_table()) != gdal.CE_None
+        except RuntimeError:
+            failed = True
+        if failed:
+            print("  ⚠ Class palette not attached (colors only, transparency is set)")
+        else:
+            band.SetRasterColorInterpretation(gdal.GCI_PaletteIndex)
+    ds.FlushCache()
+    ds = None
+    print(f"  Class {TRANSPARENT_CLASS} (else) set transparent via nodata")
 
 
 def sieve_raster(input_path, output_path, threshold, connectedness=8):
@@ -30,7 +98,7 @@ def sieve_raster(input_path, output_path, threshold, connectedness=8):
 
     band = out_ds.GetRasterBand(1)
     gdal.SieveFilter(
-        band, None, band, threshold, connectedness, callback=gdal.TermProgress
+        band, None, band, threshold, connectedness, callback=TERM_PROGRESS
     )
     out_ds.FlushCache()
     out_ds = None
@@ -161,6 +229,7 @@ def mode_filter_clean(input_path, output_path, kernel=3, iterations=1, block_siz
     out_ds.SetGeoTransform(src_ds.GetGeoTransform())
     out_ds.SetProjection(src_ds.GetProjection())
     out_band = out_ds.GetRasterBand(1)
+    set_class_palette(out_band)
 
     n_blocks_x = (width + block_size - 1) // block_size
     n_blocks_y = (height + block_size - 1) // block_size
@@ -249,6 +318,7 @@ def morphological_clean(input_path, output_path, r_dil=3, r_er=6, block_size=409
     out_ds.SetGeoTransform(src_ds.GetGeoTransform())
     out_ds.SetProjection(src_ds.GetProjection())
     out_band = out_ds.GetRasterBand(1)
+    set_class_palette(out_band)
 
     n_blocks_x = (width + block_size - 1) // block_size
     n_blocks_y = (height + block_size - 1) // block_size
@@ -288,6 +358,220 @@ def morphological_clean(input_path, output_path, r_dil=3, r_er=6, block_size=409
     print()
 
 
+def _is_vector(path):
+    ds = gdal.OpenEx(path, gdal.OF_VECTOR)
+    if ds is None:
+        return False
+    n_layers = ds.GetLayerCount()
+    ds = None
+    return n_layers > 0
+
+
+def _usable_srs(wkt):
+    """An SRS we can actually transform with (a LOCAL_CS is neither projected nor geographic)."""
+    if not wkt:
+        return None
+    srs = osr.SpatialReference()
+    if srs.ImportFromWkt(wkt) != 0:
+        return None
+    return srs if (srs.IsProjected() or srs.IsGeographic()) else None
+
+
+def _reproject_vector(buildings_path, target_wkt, work_dir):
+    """
+    Return a vector path in the target CRS.
+
+    gdal.Rasterize burns raw layer coordinates without reprojecting, so a footprint
+    file in another CRS silently produces an empty mask. Convert up front instead.
+    """
+    ds = gdal.OpenEx(buildings_path, gdal.OF_VECTOR)
+    layer = ds.GetLayer(0)
+    layer_srs = layer.GetSpatialRef()
+    layer_wkt = layer_srs.ExportToWkt() if layer_srs else None
+    ds = None
+
+    source_srs = _usable_srs(layer_wkt)
+    target_srs = _usable_srs(target_wkt)
+
+    if source_srs is None or target_srs is None:
+        if source_srs is not None and target_srs is None:
+            print(
+                "  ⚠ Raster has no usable CRS; burning footprints as raw coordinates. "
+                "Tag the raster (e.g. EPSG:3946) if the mask lands in the wrong place."
+            )
+        return buildings_path
+
+    if source_srs.IsSame(target_srs):
+        return buildings_path
+
+    print(
+        f"  Reprojecting footprints {source_srs.GetName()} -> {target_srs.GetName()}"
+    )
+    reprojected = os.path.join(work_dir, "buildings_reprojected.gpkg")
+    gdal.VectorTranslate(
+        reprojected,
+        buildings_path,
+        options=gdal.VectorTranslateOptions(
+            format="GPKG", dstSRS=target_wkt, reproject=True
+        ),
+    )
+    return reprojected
+
+
+def _grid_matches(ds, ref_gt, ref_proj, ref_width, ref_height):
+    return (
+        ds.RasterXSize == ref_width
+        and ds.RasterYSize == ref_height
+        and all(np.isclose(a, b) for a, b in zip(ds.GetGeoTransform(), ref_gt))
+        and ds.GetProjection() == ref_proj
+    )
+
+
+def build_aligned_mask(buildings_path, ref_ds, output_path):
+    """Burn a building source onto the reference raster grid (1 = building)."""
+    width, height = ref_ds.RasterXSize, ref_ds.RasterYSize
+    gt = ref_ds.GetGeoTransform()
+    proj = ref_ds.GetProjection()
+    creation = ["COMPRESS=DEFLATE", "TILED=YES", "BIGTIFF=YES"]
+
+    if _is_vector(buildings_path):
+        print(f"  Rasterizing building footprints: {buildings_path}")
+        mask_ds = gdal.GetDriverByName("GTiff").Create(
+            output_path, width, height, 1, gdal.GDT_Byte, options=creation
+        )
+        mask_ds.SetGeoTransform(gt)
+        mask_ds.SetProjection(proj)
+        work_dir = tempfile.mkdtemp()
+        try:
+            source = _reproject_vector(buildings_path, proj, work_dir)
+            gdal.Rasterize(
+                mask_ds,
+                source,
+                options=gdal.RasterizeOptions(
+                    burnValues=[1], allTouched=True, callback=TERM_PROGRESS
+                ),
+            )
+        finally:
+            mask_ds.FlushCache()
+            mask_ds = None
+            shutil.rmtree(work_dir, ignore_errors=True)
+    else:
+        print(f"  Aligning building raster: {buildings_path}")
+        minx, maxy = gt[0], gt[3]
+        maxx, miny = minx + width * gt[1], maxy + height * gt[5]
+        gdal.Warp(
+            output_path,
+            buildings_path,
+            options=gdal.WarpOptions(
+                format="GTiff",
+                outputBounds=(minx, miny, maxx, maxy),
+                width=width,
+                height=height,
+                dstSRS=proj if proj else None,
+                outputType=gdal.GDT_Byte,
+                resampleAlg="near",
+                creationOptions=creation,
+                callback=TERM_PROGRESS,
+            ),
+        )
+    print()
+
+
+def mask_buildings(input_path, output_path, buildings_path, fill=0, block_size=4096):
+    """Set every pixel covered by a building to `fill` (None means the nodata value)."""
+    print("Masking buildings...")
+
+    src_ds = gdal.Open(input_path)
+    width = src_ds.RasterXSize
+    height = src_ds.RasterYSize
+    band = src_ds.GetRasterBand(1)
+    dtype = band.DataType
+    np_dtype = gdal_array.GDALTypeCodeToNumericTypeCode(dtype)
+    print(f"  Raster size: {width}x{height} pixels")
+
+    nodata = band.GetNoDataValue()
+    if fill is None:
+        fill = nodata if nodata is not None else -9999.0
+    fill_value = np.array(fill).astype(np_dtype)
+    print(f"  Building pixels set to {fill_value}")
+
+    tmp_mask = None
+    mask_ds = gdal.Open(buildings_path) if not _is_vector(buildings_path) else None
+    if mask_ds is not None and _grid_matches(
+        mask_ds, src_ds.GetGeoTransform(), src_ds.GetProjection(), width, height
+    ):
+        print(f"  Building raster already on the target grid: {buildings_path}")
+    else:
+        mask_ds = None
+        tmp_fd, tmp_mask = tempfile.mkstemp(suffix=".tif")
+        os.close(tmp_fd)
+        build_aligned_mask(buildings_path, src_ds, tmp_mask)
+        mask_ds = gdal.Open(tmp_mask)
+    mask_band = mask_ds.GetRasterBand(1)
+    mask_nodata = mask_band.GetNoDataValue()
+
+    driver = gdal.GetDriverByName("GTiff")
+    out_ds = driver.Create(
+        output_path,
+        width,
+        height,
+        1,
+        dtype,
+        options=["COMPRESS=DEFLATE", "TILED=YES", "BIGTIFF=YES"],
+    )
+    out_ds.SetGeoTransform(src_ds.GetGeoTransform())
+    out_ds.SetProjection(src_ds.GetProjection())
+    out_band = out_ds.GetRasterBand(1)
+    set_class_palette(out_band)
+    if nodata is not None:
+        out_band.SetNoDataValue(nodata)
+    elif fill_value != 0:
+        out_band.SetNoDataValue(float(fill_value))
+
+    n_blocks_x = (width + block_size - 1) // block_size
+    n_blocks_y = (height + block_size - 1) // block_size
+    total = n_blocks_x * n_blocks_y
+    done = 0
+    masked = 0
+
+    for by in range(0, height, block_size):
+        for bx in range(0, width, block_size):
+            bw = min(block_size, width - bx)
+            bh = min(block_size, height - by)
+
+            buf = band.ReadRaster(bx, by, bw, bh, buf_type=dtype)
+            data = np.frombuffer(buf, dtype=np_dtype).reshape(bh, bw).copy()
+
+            mask_buf = mask_band.ReadRaster(bx, by, bw, bh, buf_type=gdal.GDT_Byte)
+            mask = np.frombuffer(mask_buf, dtype=np.uint8).reshape(bh, bw)
+
+            hit = mask > 0
+            if mask_nodata is not None:
+                # A mask carrying its own nodata must not mask those pixels.
+                hit &= mask != np.uint8(mask_nodata)
+            data[hit] = fill_value
+            masked += int(np.count_nonzero(hit))
+
+            out_band.WriteRaster(
+                bx, by, bw, bh, np.ascontiguousarray(data).tobytes(), buf_type=dtype
+            )
+
+            del data, mask, hit
+            done += 1
+            print(f"\r  Block {done}/{total}", end="", flush=True)
+
+    out_ds.FlushCache()
+    out_ds = None
+    mask_ds = None
+    src_ds = None
+    gc.collect()
+    print()
+    print(f"  Masked {masked:,} pixels ({100 * masked / (width * height):.2f}%)")
+
+    if tmp_mask and os.path.exists(tmp_mask):
+        os.remove(tmp_mask)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Clean raster: sieve then mode filter (default) or morphological close (legacy)",
@@ -323,6 +607,28 @@ def main():
         help="Median filter kernel size for continuous rasters (e.g. nDSM). Set > 0 to use. Nodata-aware.",
     )
     parser.add_argument(
+        "--no-transparent-else",
+        dest="transparent_else",
+        action="store_false",
+        help="Keep class 0 opaque. By default the output tags class 0 (else) as nodata "
+        "so it renders transparent, and carries the simplified-class palette.",
+    )
+    parser.add_argument(
+        "--buildings",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Building footprints to mask out, applied last. Raster (nonzero = building) "
+        "or vector (SHP/GPKG/GeoJSON); reprojected/resampled onto the input grid.",
+    )
+    parser.add_argument(
+        "--buildings-value",
+        type=float,
+        default=None,
+        metavar="V",
+        help="Value written under buildings (default: 0 for class rasters, nodata for --median-kernel).",
+    )
+    parser.add_argument(
         "--r-dil",
         type=int,
         default=0,
@@ -356,48 +662,73 @@ def main():
             f"  Mode filter: kernel={args.mode_kernel}x{args.mode_kernel}, iterations={args.mode_iterations}"
         )
         print(f"  Sieve threshold: {args.sieve} pixels")
+    if args.buildings:
+        print(f"  Building mask: {args.buildings}")
+    if args.transparent_else and not use_median:
+        print(f"  Class {TRANSPARENT_CLASS} (else): transparent + class palette")
     print(f"{'=' * 70}\n")
 
-    tmp_path = None
+    tmp_paths = []
 
-    if use_median:
-        median_filter_clean(args.input, args.output, args.median_kernel)
-    elif use_morph:
-        if args.sieve > 0:
-            tmp_fd, tmp_path = tempfile.mkstemp(suffix=".tif")
-            os.close(tmp_fd)
-            morphological_clean(args.input, tmp_path, args.r_dil, args.r_er)
-            gc.collect()
-            sieve_raster(tmp_path, args.output, args.sieve)
-        else:
-            morphological_clean(args.input, args.output, args.r_dil, args.r_er)
-    else:
-        if args.sieve > 0 and args.mode_kernel > 0:
-            tmp_fd, tmp_path = tempfile.mkstemp(suffix=".tif")
-            os.close(tmp_fd)
-            mode_filter_clean(
-                args.input, tmp_path, args.mode_kernel, args.mode_iterations
-            )
-            gc.collect()
-            sieve_raster(tmp_path, args.output, args.sieve)
-        elif args.sieve > 0:
-            sieve_raster(args.input, args.output, args.sieve)
-        elif args.mode_kernel > 0:
-            mode_filter_clean(
-                args.input, args.output, args.mode_kernel, args.mode_iterations
-            )
-        else:
-            src_ds = gdal.Open(args.input)
-            driver = gdal.GetDriverByName("GTiff")
-            driver.CreateCopy(
-                args.output,
-                src_ds,
-                options=["COMPRESS=DEFLATE", "TILED=YES", "BIGTIFF=YES"],
-            )
-            src_ds = None
+    def new_temp():
+        tmp_fd, tmp = tempfile.mkstemp(suffix=".tif")
+        os.close(tmp_fd)
+        tmp_paths.append(tmp)
+        return tmp
 
-    if tmp_path and os.path.exists(tmp_path):
-        os.remove(tmp_path)
+    # Buildings are masked out last, so the filters run on the untouched raster.
+    clean_output = new_temp() if args.buildings else args.output
+
+    try:
+        if use_median:
+            median_filter_clean(args.input, clean_output, args.median_kernel)
+        elif use_morph:
+            if args.sieve > 0:
+                tmp_path = new_temp()
+                morphological_clean(args.input, tmp_path, args.r_dil, args.r_er)
+                gc.collect()
+                sieve_raster(tmp_path, clean_output, args.sieve)
+            else:
+                morphological_clean(args.input, clean_output, args.r_dil, args.r_er)
+        else:
+            if args.sieve > 0 and args.mode_kernel > 0:
+                tmp_path = new_temp()
+                mode_filter_clean(
+                    args.input, tmp_path, args.mode_kernel, args.mode_iterations
+                )
+                gc.collect()
+                sieve_raster(tmp_path, clean_output, args.sieve)
+            elif args.sieve > 0:
+                sieve_raster(args.input, clean_output, args.sieve)
+            elif args.mode_kernel > 0:
+                mode_filter_clean(
+                    args.input, clean_output, args.mode_kernel, args.mode_iterations
+                )
+            else:
+                src_ds = gdal.Open(args.input)
+                driver = gdal.GetDriverByName("GTiff")
+                driver.CreateCopy(
+                    clean_output,
+                    src_ds,
+                    options=["COMPRESS=DEFLATE", "TILED=YES", "BIGTIFF=YES"],
+                )
+                src_ds = None
+
+        if args.buildings:
+            gc.collect()
+            fill = args.buildings_value
+            if fill is None:
+                fill = None if use_median else 0
+            mask_buildings(clean_output, args.output, args.buildings, fill)
+
+        # Continuous rasters (--median-kernel) keep their own nodata, no classes.
+        if args.transparent_else and not use_median:
+            apply_class_transparency(args.output)
+    finally:
+        # These are full-size copies of the raster; never leave them behind on a crash.
+        for tmp in tmp_paths:
+            if os.path.exists(tmp):
+                os.remove(tmp)
 
     print(f"Saved to {args.output}")
 

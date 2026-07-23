@@ -36,6 +36,9 @@ clean_raster: # postprocessing/clean_raster.py
   mode_filter:
     kernel: 3
     iterations: 1
+  buildings: null 
+  buildings_value: null 
+  transparent_else: true 
   morph_ops:  # legacy, set r_dil > 0 to use instead of mode filter
     - [dilate, 0]
     - [erode, 0]

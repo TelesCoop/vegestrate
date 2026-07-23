@@ -52,7 +52,8 @@ def vectorize_raster(
     if use_8connected:
         options.append("8CONNECTED=8")
 
-    gdal.Polygonize(src_band, None, dst_layer, 0, options, callback=gdal.TermProgress)
+    term_progress = getattr(gdal, "TermProgress_nocb", None)
+    gdal.Polygonize(src_band, None, dst_layer, 0, options, callback=term_progress)
 
     print(
         "\nFlushing and indexing (this may take a while for large files)...", flush=True

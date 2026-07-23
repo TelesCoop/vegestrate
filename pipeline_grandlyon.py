@@ -342,6 +342,18 @@ def phase_clean_raster(config: dict) -> bool:
             str(mode.get("iterations", 1)),
         ]
 
+        if not cr.get("transparent_else", True):
+            cmd_args.append("--no-transparent-else")
+
+        buildings = cr.get("buildings")
+        if buildings:
+            if not Path(buildings).exists():
+                print(f"\n✗ Error: Building mask not found: {buildings}")
+                return False
+            cmd_args.extend(["--buildings", buildings])
+            if cr.get("buildings_value") is not None:
+                cmd_args.extend(["--buildings-value", str(cr["buildings_value"])])
+
         if not run_module_main(
             "src.postprocessing.clean_raster",
             cmd_args,
