@@ -3,14 +3,14 @@ pipeline:
   splits: [test]
 
 data: # data_preparation/prepare_training_data_grandlyon.py
-  manifest: data/dataset_manifest_grandlyon.json
-  resolution: 0.2
+  manifest: data/dataset_manifest_grandlyon_2015.json
+  resolution: 0.8
   workers: 14
   ir_mosaic: null
   download_ir: false
 
 inference: # inference/inference_flair_context.py
-  checkpoint: FLAIR-HUB_LC-A_RGB_swinlarge-upernet.safetensors
+  checkpoint: FLAIR-HUB_LC-A_IR_swinlarge-upernet.safetensors
   download_checkpoint: false
   tile_size: 512
   overlap: 256
@@ -20,7 +20,7 @@ inference: # inference/inference_flair_context.py
   batch_size: 8
   fp16: true
   compile: true
-  use_ir: false
+  use_ir: true
   class_bias: null # e.g. ["1:2.0"] to boost herbaceous
   herb_margin: 0.0 # e.g. 3.0 to recover herbaceous from 'else'; 0 disables
 
