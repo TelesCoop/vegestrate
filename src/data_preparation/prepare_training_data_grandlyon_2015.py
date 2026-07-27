@@ -70,10 +70,16 @@ def merge_pointclouds(paths):
 def download_and_process_lidar(url, output_dir, resolution=0.8):
     tile_name = extract_tile_name(url)
     zip_path = output_dir / f"{tile_name}.zip"
+    classmap_path = output_dir / f"classification_map_{tile_name}.tif"
+    ndsm_path = output_dir / f"ndsm_{tile_name}.tif"
 
     print(f"\n{'=' * 70}")
     print(f"Processing tile: {tile_name}")
     print(f"{'=' * 70}")
+
+    if classmap_path.exists() and ndsm_path.exists():
+        print(f"✓ Classification map and nDSM already exist: {classmap_path}")
+        return classmap_path
 
     if not zip_path.exists():
         print(f"Downloading LiDAR data from {url}...")
@@ -90,10 +96,7 @@ def download_and_process_lidar(url, output_dir, resolution=0.8):
 
     filtered_las = filter_ground_vegetation(las, lyon=True)
 
-    classmap_path = output_dir / f"classification_map_{tile_name}.tif"
     create_classification_map(filtered_las, las, classmap_path, resolution=resolution)
-
-    ndsm_path = output_dir / f"ndsm_{tile_name}.tif"
     create_ndsm(las, ndsm_path, resolution=resolution)
 
     zip_path.unlink()
@@ -186,18 +189,18 @@ def process_tile(resolution, entry, output_dir):
         tile_name = extract_tile_name(url)
         classmap_path = download_and_process_lidar(url, output_dir, resolution)
 
-        fetch_wcs_for_raster(
-            classmap_path,
-            output_dir / f"{tile_name}_orthophoto.tif",
-            RGB_COVERAGE,
-            resolution,
-        )
-        fetch_wcs_for_raster(
-            classmap_path,
-            output_dir / f"{tile_name}_ir.tif",
-            IR_COVERAGE,
-            resolution,
-        )
+        ortho_path = output_dir / f"{tile_name}_orthophoto.tif"
+        if ortho_path.exists():
+            print(f"✓ Orthophoto already exists: {ortho_path}")
+        else:
+            fetch_wcs_for_raster(classmap_path, ortho_path, RGB_COVERAGE, resolution)
+
+        ir_path = output_dir / f"{tile_name}_ir.tif"
+        if ir_path.exists():
+            print(f"✓ IR tile already exists: {ir_path}")
+        else:
+            fetch_wcs_for_raster(classmap_path, ir_path, IR_COVERAGE, resolution)
+
         return {"tile_id": tile_id, "status": "success"}
     except Exception as e:
         print(f"\n✗ Error processing {tile_id}: {e}")
@@ -273,10 +276,10 @@ def _self_check():
         las = laspy.LasData(
             header, laspy.PackedPointRecord.zeros(3, header.point_format)
         )
-        las.x = [x0, x0 + 1, x0 + 2]
-        las.y = [y0, y0 + 1, y0 + 2]
-        las.z = [10.0, 11.0, 12.0]
-        las.classification = [2, 3, 5]
+        las.x = np.array([x0, x0 + 1, x0 + 2])
+        las.y = np.array([y0, y0 + 1, y0 + 2])
+        las.z = np.array([10.0, 11.0, 12.0])
+        las.classification = np.array([2, 3, 5])
         return las
 
     import tempfile

@@ -2,7 +2,7 @@ pipeline:
   output_name: lyon_2015_ir_08
   splits: [test]
 
-data: # data_preparation/prepare_training_data_grandlyon.py
+data: # data_preparation/prepare_training_data_grandlyon.py or _2015.py (auto-selected by "2015" in manifest filename)
   manifest: data/dataset_manifest_grandlyon_2015.json
   resolution: 0.8
   workers: 14
