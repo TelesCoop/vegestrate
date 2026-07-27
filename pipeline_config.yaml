@@ -1,5 +1,5 @@
 pipeline:
-  output_name: lyon
+  output_name: lyon_2015_ir_08
   splits: [test]
 
 data: # data_preparation/prepare_training_data_grandlyon.py

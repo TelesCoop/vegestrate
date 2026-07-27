@@ -80,6 +80,12 @@ class StateManager:
         self._save()
 
 
+def log_timing(timing_log_path: Path, message: str) -> None:
+    ts = datetime.now(timezone.utc).isoformat()
+    with open(timing_log_path, "a") as f:
+        f.write(f"{ts}  {message}\n")
+
+
 def run_module_main(module_path: str, args: list[str], description: str) -> bool:
     print(f"\n{'=' * 70}")
     print(f"{description}")
@@ -581,6 +587,9 @@ def main() -> int:
     state_path = Path(config_path).with_name(Path(config_path).stem + "_state.json")
     state = StateManager(state_path, cfg_hash)
 
+    timing_log_path = Path(config_path).with_name(Path(config_path).stem + "_timing.log")
+    log_timing(timing_log_path, f"=== Pipeline run started (config={config_path}) ===")
+
     start_time = time.time()
 
     print("=" * 70)
@@ -588,6 +597,7 @@ def main() -> int:
     print("=" * 70)
     print(f"Config: {config_path}")
     print(f"State:  {state_path}")
+    print(f"Timing: {timing_log_path}")
     print(f"Manifest: {config['data']['manifest']}")
     print(f"Checkpoint: {config['inference']['checkpoint']}")
     print(f"Resolution: {config['data']['resolution']}m")
@@ -606,15 +616,21 @@ def main() -> int:
         )
         if not enabled:
             state.skip(phase_name, "disabled in config")
+            log_timing(timing_log_path, f"{phase_name:25s} SKIPPED (disabled)")
             continue
 
         if not state.should_run(phase_name, forced):
             dur = state.state["phases"][phase_name].get("duration_seconds")
             dur_str = f" in {dur:.1f}s" if dur is not None else ""
             print(f"→ {phase_name}: skipping (succeeded{dur_str})")
+            log_timing(
+                timing_log_path,
+                f"{phase_name:25s} SKIPPED (already succeeded{dur_str})",
+            )
             continue
 
         state.begin(phase_name)
+        log_timing(timing_log_path, f"{phase_name:25s} START")
         try:
             success = PHASE_FUNCS[phase_name](config)
             state.end(phase_name, success)
@@ -625,11 +641,18 @@ def main() -> int:
             state.end(phase_name, False, error=str(e))
             success = False
 
+        dur = state.state["phases"][phase_name].get("duration_seconds")
+        dur_str = f"{dur:.1f}s" if dur is not None else "?"
+        status = "SUCCESS" if success else "FAILED"
+        log_timing(timing_log_path, f"{phase_name:25s} {status:8s} {dur_str}")
+
         if not success and phase_name in BLOCKING_PHASES:
             print(f"✗ Pipeline stopped at {phase_name}")
+            log_timing(timing_log_path, f"=== Pipeline stopped at {phase_name} ===")
             return 1
 
     elapsed = time.time() - start_time
+    log_timing(timing_log_path, f"=== Pipeline complete: TOTAL {elapsed:.1f}s ===")
     print_summary(config, state, elapsed)
 
     return 0
