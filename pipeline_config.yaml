@@ -21,8 +21,8 @@ inference: # inference/inference_flair_context.py
   fp16: true
   compile: true
   use_ir: false
-  class_bias: ["1:2.0"] # e.g. ["1:2.0"] to boost herbaceous
-  herb_margin: 3.0
+  class_bias: null # e.g. ["1:2.0"] to boost herbaceous
+  herb_margin: 0.0 # e.g. 3.0 to recover herbaceous from 'else'; 0 disables
 
 merge: # postprocessing/merge_tifs.py
   strategy: mode

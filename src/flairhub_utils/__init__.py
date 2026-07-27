@@ -7,6 +7,7 @@ from .class_mappings import (  # noqa: F401
     SIMPLIFIED_COLORS,
     TRANSPARENT_CLASS,
     get_class_color,
+    group_logits_to_4_probs,
     remap_to_4_classes,
 )
 from .dataset import FlairDataset  # noqa: F401
@@ -40,6 +41,7 @@ __all__ = [
     "TRANSPARENT_CLASS",
     "CLASS_REMAP_19_TO_4",
     "get_class_color",
+    "group_logits_to_4_probs",
     "remap_to_4_classes",
     "FlairDataset",
     "FocalDiceLoss",

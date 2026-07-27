@@ -160,7 +160,7 @@ def phase_flair_inference(config: dict) -> bool:
         "--batch_size",
         str(config["inference"].get("batch_size", 8)),
         "--herb_margin",
-        str(config["inference"].get("herb_margin", 3.0)),
+        str(config["inference"].get("herb_margin", 0.0)),
     ]
 
     if config["inference"].get("download_checkpoint", False):

@@ -82,6 +82,37 @@ def remap_to_4_classes(class_map_19: np.ndarray) -> np.ndarray:
     return class_map_4
 
 
+def group_logits_to_4_probs(logits_19: np.ndarray) -> np.ndarray:
+    """Convert 19-class FLAIR logits to 4-class simplified probabilities.
+
+    Softmax over the 19 fine classes, then sum the probabilities of every fine
+    class that maps to each simplified class (per ``CLASS_REMAP_19_TO_4``).
+
+    Summing probabilities before argmax — rather than argmax-then-relabel as
+    ``remap_to_4_classes`` does — prevents vote splitting: "trees" collects the
+    combined mass of deciduous, coniferous, ligneous and mixed instead of
+    losing to a single competing fine class that happens to out-score each of
+    them individually.
+
+    Args:
+        logits_19: Logits array with the 19 FLAIR classes on the last axis,
+            e.g. shape (H, W, 19).
+
+    Returns:
+        Probability array with 4 simplified classes on the last axis
+        (H, W, 4), each pixel summing to 1.
+    """
+    shifted = logits_19 - logits_19.max(axis=-1, keepdims=True)
+    exp = np.exp(shifted)
+    probs = exp / exp.sum(axis=-1, keepdims=True)
+
+    grouped = np.zeros(probs.shape[:-1] + (4,), dtype=probs.dtype)
+    for old_class, new_class in CLASS_REMAP_19_TO_4.items():
+        grouped[..., new_class] += probs[..., old_class]
+
+    return grouped
+
+
 def get_class_name(class_id: int, simplified: bool = True) -> str:
     """
     Get class name from ID.

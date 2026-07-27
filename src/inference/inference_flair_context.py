@@ -597,9 +597,9 @@ def parse_args():
     parser.add_argument(
         "--herb_margin",
         type=float,
-        default=3.0,
+        default=0.0,
         help="Herbaceous recovery margin: pixels classified as 'else' where herbaceous "
-        "logit was within this margin get flipped to herbaceous (default: 3.0)",
+        "logit was within this margin get flipped to herbaceous. 0 disables it (default: 0.0)",
     )
     parser.add_argument(
         "--batch_size",
