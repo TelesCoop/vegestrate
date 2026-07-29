@@ -29,6 +29,13 @@ RGB_COVERAGE = "grandlyon__ortho_2015"
 IR_COVERAGE = "grandlyon__Grand_Lyon_IRC_8cm_CC46"
 MAX_BLOCK_PX = 4000
 
+# 2015 Grand Lyon LiDAR tiles carry no embedded CRS (las.header.parse_crs() is
+# None), but their raw coordinates are in RGF93 / CC46 (EPSG:3946) — Grand
+# Lyon's local Lambert Conique Conforme zone (see the "CC46" WCS layer names
+# above), not national Lambert-93 (EPSG:2154). Tagging them as EPSG:2154
+# reprojects Lyon into the Mediterranean Sea south of Sicily.
+LAS_FALLBACK_CRS = "EPSG:3946"
+
 
 def extract_tile_name(url):
     return url.split("/")[-1].split(".")[0]
@@ -96,8 +103,10 @@ def download_and_process_lidar(url, output_dir, resolution=0.8):
 
     filtered_las = filter_ground_vegetation(las, lyon=True)
 
-    create_classification_map(filtered_las, las, classmap_path, resolution=resolution)
-    create_ndsm(las, ndsm_path, resolution=resolution)
+    create_classification_map(
+        filtered_las, las, classmap_path, resolution=resolution, crs=LAS_FALLBACK_CRS
+    )
+    create_ndsm(las, ndsm_path, resolution=resolution, crs=LAS_FALLBACK_CRS)
 
     zip_path.unlink()
     for laz_path in laz_paths:
