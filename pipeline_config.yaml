@@ -10,7 +10,7 @@ data: # data_preparation/prepare_training_data_grandlyon.py or _2015.py (auto-se
   download_ir: false
 
 inference: # inference/inference_flair_context.py
-  checkpoint: FLAIR-HUB_LC-A_IR_swinlarge-upernet.safetensors
+  checkpoint: FLAIR-HUB_LC-A_RGB_swinlarge-upernet.safetensors
   download_checkpoint: false
   tile_size: 512
   overlap: 256
@@ -20,7 +20,11 @@ inference: # inference/inference_flair_context.py
   batch_size: 64
   fp16: true
   compile: true
-  use_ir: true
+  use_ir: false  # Grand Lyon 2015 IRC WCS layer is radiometrically far brighter
+                 # than FLAIR-HUB's training distribution (measured mean ~210
+                 # vs training's 106.6) and causes systematic over-prediction
+                 # of herbaceous/grass. RGB channels are much closer to the
+                 # training distribution, so use the RGB checkpoint instead.
   class_bias: null # e.g. ["1:2.0"] to boost herbaceous
   herb_margin: 0.0 # e.g. 3.0 to recover herbaceous from 'else'; 0 disables
 

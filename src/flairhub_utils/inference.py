@@ -1,8 +1,17 @@
 import numpy as np
 import torch
 
-AERIAL_RGBI_MEANS = np.array([106.59, 105.66, 111.35])
-AERIAL_RGBI_STDS = np.array([39.78, 52.23, 45.62])
+# FLAIR-HUB_LC-A_IR checkpoint: mosaic channel order [IR, R, G]
+AERIAL_RGBI_MEANS_IR = np.array([106.59, 105.66, 111.35])
+AERIAL_RGBI_STDS_IR = np.array([39.78, 52.23, 45.62])
+
+# FLAIR-HUB_LC-A_RGB checkpoint: mosaic channel order [R, G, B]
+AERIAL_RGBI_MEANS_RGB = np.array([105.66, 111.35, 102.18])
+AERIAL_RGBI_STDS_RGB = np.array([52.23, 45.62, 44.30])
+
+# Backwards-compatible aliases (IR stats, matches the historical default)
+AERIAL_RGBI_MEANS = AERIAL_RGBI_MEANS_IR
+AERIAL_RGBI_STDS = AERIAL_RGBI_STDS_IR
 
 
 def normalize_image(
@@ -62,19 +71,27 @@ class FlairInference:
     """
 
     @staticmethod
-    def preprocess_tile(tile_image: np.ndarray, normalize: bool = True) -> torch.Tensor:
+    def preprocess_tile(
+        tile_image: np.ndarray,
+        normalize: bool = True,
+        means: np.ndarray = AERIAL_RGBI_MEANS,
+        stds: np.ndarray = AERIAL_RGBI_STDS,
+    ) -> torch.Tensor:
         """
         Preprocess a tile for model input.
 
         Args:
             tile_image: Tile image (H, W, C) in range 0-255
             normalize: Whether to normalize (default: True)
+            means: Per-channel means, matching the tile's channel order
+                   (default: IR checkpoint stats, for backwards compatibility)
+            stds: Per-channel stds, matching the tile's channel order
 
         Returns:
             Preprocessed tensor (1, C, H, W)
         """
         if normalize:
-            tile_image = normalize_image(tile_image)
+            tile_image = normalize_image(tile_image, means=means, stds=stds)
 
         tile_tensor = torch.from_numpy(tile_image).float()
         tile_tensor = tile_tensor.permute(2, 0, 1).unsqueeze(0)  # (1, C, H, W)

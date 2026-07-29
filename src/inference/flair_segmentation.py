@@ -14,6 +14,12 @@ from ..flairhub_utils import (
     group_logits_to_4_probs,
     load_flair_model,
 )
+from ..flairhub_utils.inference import (
+    AERIAL_RGBI_MEANS_IR,
+    AERIAL_RGBI_MEANS_RGB,
+    AERIAL_RGBI_STDS_IR,
+    AERIAL_RGBI_STDS_RGB,
+)
 
 
 class FlairSegmentation:
@@ -28,6 +34,7 @@ class FlairSegmentation:
         batch_size: int = 8,
         use_fp16: bool = True,
         use_compile: bool = True,
+        use_ir: bool = True,
     ):
         """
         Initialize FLAIR segmentation model.
@@ -41,12 +48,18 @@ class FlairSegmentation:
             batch_size: Number of tiles to process simultaneously (default: 8)
             use_fp16: Use FP16 mixed precision for faster inference (default: True)
             use_compile: Use torch.compile for optimization (default: True)
+            use_ir: Whether input tiles are ordered [IR, R, G] (IR checkpoint) or
+                    [R, G, B] (RGB checkpoint). Selects the matching per-channel
+                    normalization statistics (default: True).
         """
         self.checkpoint_path = Path(checkpoint_path)
         self.use_simplified_classes = use_simplified_classes
         self.batch_size = batch_size
         self.use_fp16 = use_fp16 and torch.cuda.is_available()
         self.use_compile = use_compile
+        self.use_ir = use_ir
+        self.norm_means = AERIAL_RGBI_MEANS_IR if use_ir else AERIAL_RGBI_MEANS_RGB
+        self.norm_stds = AERIAL_RGBI_STDS_IR if use_ir else AERIAL_RGBI_STDS_RGB
 
         if device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -69,6 +82,10 @@ class FlairSegmentation:
         print(f"Batch size: {self.batch_size}")
         print(f"FP16: {self.use_fp16}")
         print(f"torch.compile: {self.use_compile}")
+        print(
+            f"Channel order: {'[IR, R, G]' if self.use_ir else '[R, G, B]'}, "
+            f"norm means={self.norm_means.tolist()}, stds={self.norm_stds.tolist()}"
+        )
         if self.use_simplified_classes:
             print("Mode: 4 simplified classes (else, herbaceous, hedge, trees)")
         else:
@@ -134,7 +151,9 @@ class FlairSegmentation:
         Returns:
             Tuple of (class_prob or logits_np, depending on class_id)
         """
-        tile_tensor = FlairInference.preprocess_tile(tile_image, normalize=True)
+        tile_tensor = FlairInference.preprocess_tile(
+            tile_image, normalize=True, means=self.norm_means, stds=self.norm_stds
+        )
         tile_tensor = tile_tensor.to(self.device)
 
         batch = {
@@ -237,7 +256,9 @@ class FlairSegmentation:
         """
         batch_tensors = []
         for tile_image in batch_images:
-            tile_tensor = FlairInference.preprocess_tile(tile_image, normalize=True)
+            tile_tensor = FlairInference.preprocess_tile(
+                tile_image, normalize=True, means=self.norm_means, stds=self.norm_stds
+            )
             batch_tensors.append(tile_tensor)
 
         batch_tensor = torch.cat(batch_tensors, dim=0).to(self.device)

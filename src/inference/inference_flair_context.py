@@ -75,6 +75,7 @@ def initialize_model(
     batch_size: int = 8,
     use_fp16: bool = True,
     use_compile: bool = True,
+    use_ir: bool = True,
 ) -> FlairSegmentation:
     """Initialize FLAIR segmentation model.
 
@@ -83,6 +84,8 @@ def initialize_model(
         batch_size: Number of tiles to process simultaneously
         use_fp16: Use FP16 mixed precision
         use_compile: Use torch.compile optimization
+        use_ir: Whether the checkpoint/mosaic use [IR, R, G] (True) or
+                [R, G, B] (False) — selects matching normalization stats
 
     Returns:
         Initialized FlairSegmentation model
@@ -97,6 +100,7 @@ def initialize_model(
         batch_size=batch_size,
         use_fp16=use_fp16,
         use_compile=use_compile,
+        use_ir=use_ir,
     )
 
     print("\nAvailable classes (4 simplified classes):")
@@ -686,6 +690,7 @@ def main():
         batch_size=args.batch_size,
         use_fp16=not args.no_fp16,
         use_compile=not args.no_compile,
+        use_ir=ir_tile_map is not None,
     )
 
     total_processed = 0
