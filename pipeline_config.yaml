@@ -1,10 +1,10 @@
 pipeline:
-  output_name: lyon
+  output_name: lyon_2015_ir_08
   splits: [test]
 
-data: # data_preparation/prepare_training_data_grandlyon.py
-  manifest: data/dataset_manifest_grandlyon.json
-  resolution: 0.2
+data: # data_preparation/prepare_training_data_grandlyon.py or _2015.py (auto-selected by "2015" in manifest filename)
+  manifest: data/dataset_manifest_grandlyon_2015.json
+  resolution: 0.8
   workers: 14
   ir_mosaic: null
   download_ir: false
@@ -17,12 +17,16 @@ inference: # inference/inference_flair_context.py
   grid_step: 5
   tta: false
   tta_modes: null  # e.g. [hflip, vflip, hvflip] — null means all three
-  batch_size: 8
+  batch_size: 64
   fp16: true
   compile: true
-  use_ir: false
-  class_bias: ["1:2.0"] # e.g. ["1:2.0"] to boost herbaceous
-  herb_margin: 3.0
+  use_ir: false  # Grand Lyon 2015 IRC WCS layer is radiometrically far brighter
+                 # than FLAIR-HUB's training distribution (measured mean ~210
+                 # vs training's 106.6) and causes systematic over-prediction
+                 # of herbaceous/grass. RGB channels are much closer to the
+                 # training distribution, so use the RGB checkpoint instead.
+  class_bias: null # e.g. ["1:2.0"] to boost herbaceous
+  herb_margin: 0.0 # e.g. 3.0 to recover herbaceous from 'else'; 0 disables
 
 merge: # postprocessing/merge_tifs.py
   strategy: mode
@@ -36,6 +40,9 @@ clean_raster: # postprocessing/clean_raster.py
   mode_filter:
     kernel: 3
     iterations: 1
+  buildings: null
+  buildings_value: null
+  transparent_else: true
   morph_ops:  # legacy, set r_dil > 0 to use instead of mode filter
     - [dilate, 0]
     - [erode, 0]

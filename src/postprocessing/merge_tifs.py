@@ -7,8 +7,10 @@ from typing import Optional
 import geopandas as gpd
 import numpy as np
 import rasterio
+from rasterio.coords import BoundingBox
 from rasterio.features import shapes
 from rasterio.transform import Affine
+from rasterio.warp import reproject, transform_bounds
 from rasterio.windows import Window
 from shapely.geometry import shape
 from smoothify import smoothify
@@ -24,6 +26,7 @@ class TileMerger:
         clip_values: Optional[tuple] = None,
         resolution_tolerance: float = 1e-3,
         resample_mismatch: bool = False,
+        reproject_mismatch: bool = False,
     ):
         """
         Initialize the tile merger.
@@ -34,6 +37,8 @@ class TileMerger:
             clip_values: Tuple (min, max) to clip output values (e.g., (0, 3))
             resolution_tolerance: Tolerance for resolution matching (default: 1e-3)
             resample_mismatch: Resample tiles with mismatched resolutions (default: False)
+            reproject_mismatch: Reproject tiles with a different CRS onto the
+                reference CRS (default: False)
         """
         valid_strategies = ["mode", "last", "max"]
         if merge_strategy not in valid_strategies:
@@ -47,11 +52,15 @@ class TileMerger:
         self.clip_values = clip_values
         self.resolution_tolerance = resolution_tolerance
         self.resample_mismatch = resample_mismatch
+        self.reproject_mismatch = reproject_mismatch
         self.tiles_info = []
         self.ref_res = None
+        self.ref_crs = None
 
-    def _check_resolution_mismatch(self, tile_res: tuple, ref_res: tuple, fpath: str):
-        """Check and handle resolution mismatches."""
+    def _check_resolution_mismatch(
+        self, tile_res: tuple, ref_res: tuple, fpath: str
+    ) -> bool:
+        """Check resolution mismatch. Returns True if the tile needs resampling."""
         res_diff_x = abs(tile_res[0] - ref_res[0])
         res_diff_y = abs(tile_res[1] - ref_res[1])
 
@@ -63,29 +72,28 @@ class TileMerger:
                 print(
                     f"  Warning: {fpath} has resolution {tile_res}, resampling to {ref_res}"
                 )
-                self.tiles_info[-1]["needs_resample"] = True
+                return True
             else:
                 raise ValueError(
                     f"Resolution mismatch: {fpath} has {tile_res}, expected {ref_res}. "
                     f"Difference: ({res_diff_x:.10f}, {res_diff_y:.10f}). "
                     f"Use --tolerance to increase tolerance or --resample-mismatch to auto-resample."
                 )
+        return False
 
-    def _validate_tile_metadata(
+    def _check_tile_compatibility(
         self, src, fpath: str, ref_crs, ref_res, ref_dtype, ref_count
-    ):
-        """Validate tile metadata against reference."""
+    ) -> tuple[bool, bool, "BoundingBox"]:
+        """
+        Validate tile metadata against reference and work out what needs
+        to happen to bring it into the mosaic.
+
+        Returns:
+            (needs_resample, needs_reproject, bounds) where bounds is
+            expressed in ref_crs.
+        """
         if ref_crs is None or ref_res is None:
             raise ValueError("Reference metadata not initialized")
-
-        if src.crs != ref_crs:
-            raise ValueError(
-                f"CRS mismatch: {fpath} has {src.crs} (EPSG:{src.crs.to_epsg()}), "
-                f"expected {ref_crs} (EPSG:{ref_crs.to_epsg()})"
-            )
-
-        tile_res = (src.transform.a, src.transform.e)
-        self._check_resolution_mismatch(tile_res, ref_res, fpath)
 
         if src.dtypes[0] != ref_dtype:
             print(f"Warning: dtype mismatch in {fpath}: {src.dtypes[0]} vs {ref_dtype}")
@@ -95,9 +103,28 @@ class TileMerger:
                 f"Band count mismatch: {fpath} has {src.count}, expected {ref_count}"
             )
 
+        if src.crs != ref_crs:
+            if self.reproject_mismatch:
+                print(
+                    f"  Warning: {fpath} has CRS {src.crs} "
+                    f"(EPSG:{src.crs.to_epsg()}), reprojecting to {ref_crs} "
+                    f"(EPSG:{ref_crs.to_epsg()})"
+                )
+                bounds = BoundingBox(*transform_bounds(src.crs, ref_crs, *src.bounds))
+                return True, True, bounds
+            raise ValueError(
+                f"CRS mismatch: {fpath} has {src.crs} (EPSG:{src.crs.to_epsg()}), "
+                f"expected {ref_crs} (EPSG:{ref_crs.to_epsg()}). "
+                f"Use --reproject-mismatch to automatically reproject."
+            )
+
+        tile_res = (src.transform.a, src.transform.e)
+        needs_resample = self._check_resolution_mismatch(tile_res, ref_res, fpath)
+        return needs_resample, False, src.bounds
+
     def _get_tile_dimensions(self, tile: dict, ref_res: tuple) -> tuple[int, int]:
-        """Get tile dimensions, accounting for resampling."""
-        if tile["needs_resample"]:
+        """Get tile dimensions, accounting for resampling/reprojection."""
+        if tile["needs_resample"] or tile["needs_reproject"]:
             target_height = int(
                 np.round((tile["bounds"].top - tile["bounds"].bottom) / abs(ref_res[1]))
             )
@@ -141,29 +168,14 @@ class TileMerger:
 
         for i, fpath in enumerate(file_paths, 1):
             with rasterio.open(fpath) as src:
-                bounds = src.bounds
                 needs_resample = False
-
-                self.tiles_info.append(
-                    {
-                        "path": fpath,
-                        "bounds": bounds,
-                        "transform": src.transform,
-                        "shape": src.shape,
-                        "window": None,  # Will be calculated later
-                        "needs_resample": needs_resample,
-                        "original_res": (src.transform.a, src.transform.e),
-                    }
-                )
-
-                min_x = min(min_x, bounds.left)
-                min_y = min(min_y, bounds.bottom)
-                max_x = max(max_x, bounds.right)
-                max_y = max(max_y, bounds.top)
+                needs_reproject = False
+                bounds = src.bounds
 
                 if ref_crs is None:
                     ref_crs = src.crs
                     ref_res = (src.transform.a, src.transform.e)
+                    self.ref_crs = ref_crs
                     self.ref_res = ref_res
                     ref_dtype = src.dtypes[0]
                     ref_count = src.count
@@ -173,9 +185,30 @@ class TileMerger:
                         f"  Reference CRS: {ref_crs} (EPSG:{ref_crs.to_epsg() if ref_crs.to_epsg() else 'custom'})"
                     )
                 else:
-                    self._validate_tile_metadata(
-                        src, fpath, ref_crs, ref_res, ref_dtype, ref_count
+                    needs_resample, needs_reproject, bounds = (
+                        self._check_tile_compatibility(
+                            src, fpath, ref_crs, ref_res, ref_dtype, ref_count
+                        )
                     )
+
+                self.tiles_info.append(
+                    {
+                        "path": fpath,
+                        "bounds": bounds,
+                        "transform": src.transform,
+                        "shape": src.shape,
+                        "window": None,  # Will be calculated later
+                        "needs_resample": needs_resample,
+                        "needs_reproject": needs_reproject,
+                        "original_res": (src.transform.a, src.transform.e),
+                        "original_crs": src.crs,
+                    }
+                )
+
+                min_x = min(min_x, bounds.left)
+                min_y = min(min_y, bounds.bottom)
+                max_x = max(max_x, bounds.right)
+                max_y = max(max_y, bounds.top)
 
             if i % 10 == 0:
                 print(f"  Scanned {i}/{len(file_paths)} tiles...")
@@ -230,7 +263,33 @@ class TileMerger:
             raise ValueError("Reference resolution not set")
 
         with rasterio.open(tile_info["path"]) as src:
-            if tile_info["needs_resample"]:
+            if tile_info["needs_reproject"]:
+                target_width, target_height = self._get_tile_dimensions(
+                    tile_info, self.ref_res
+                )
+                dst_transform = Affine(
+                    self.ref_res[0],
+                    0.0,
+                    tile_info["bounds"].left,
+                    0.0,
+                    self.ref_res[1],
+                    tile_info["bounds"].top,
+                )
+                data = np.zeros(
+                    (src.count, target_height, target_width), dtype=src.dtypes[0]
+                )
+                reproject(
+                    source=rasterio.band(src, list(range(1, src.count + 1))),
+                    destination=data,
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=dst_transform,
+                    dst_crs=self.ref_crs,
+                    src_nodata=src.nodata if src.nodata is not None else self.nodata,
+                    dst_nodata=self.nodata,
+                    resampling=Resampling.nearest,
+                )
+            elif tile_info["needs_resample"]:
                 target_height = int(
                     np.round(
                         (src.bounds.top - src.bounds.bottom) / abs(self.ref_res[1])
@@ -694,6 +753,12 @@ def main():
         help="Automatically resample tiles with mismatched resolutions",
     )
 
+    parser.add_argument(
+        "--reproject-mismatch",
+        action="store_true",
+        help="Automatically reproject tiles with a different CRS onto the reference CRS",
+    )
+
     args = parser.parse_args()
 
     if "*" in args.input or "?" in args.input:
@@ -727,6 +792,7 @@ def main():
         clip_values=clip_values,
         resolution_tolerance=args.tolerance,
         resample_mismatch=args.resample_mismatch,
+        reproject_mismatch=args.reproject_mismatch,
     )
 
     try:

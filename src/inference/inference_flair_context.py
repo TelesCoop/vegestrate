@@ -75,6 +75,7 @@ def initialize_model(
     batch_size: int = 8,
     use_fp16: bool = True,
     use_compile: bool = True,
+    use_ir: bool = True,
 ) -> FlairSegmentation:
     """Initialize FLAIR segmentation model.
 
@@ -83,6 +84,8 @@ def initialize_model(
         batch_size: Number of tiles to process simultaneously
         use_fp16: Use FP16 mixed precision
         use_compile: Use torch.compile optimization
+        use_ir: Whether the checkpoint/mosaic use [IR, R, G] (True) or
+                [R, G, B] (False) — selects matching normalization stats
 
     Returns:
         Initialized FlairSegmentation model
@@ -97,6 +100,7 @@ def initialize_model(
         batch_size=batch_size,
         use_fp16=use_fp16,
         use_compile=use_compile,
+        use_ir=use_ir,
     )
 
     print("\nAvailable classes (4 simplified classes):")
@@ -238,6 +242,52 @@ def find_tile_neighbors(
     return {pos: tile_map.get(coords) for pos, coords in neighbors.items()}
 
 
+def _mosaic_slices(
+    row_idx: int,
+    col_idx: int,
+    tile_shape: tuple[int, int],
+    data_tile_size: int,
+) -> tuple[slice, slice, slice, slice]:
+    """Compute source/destination slices for placing a neighbor in the mosaic.
+
+    Neighbor tiles may be larger or smaller than the center tile. Each is
+    cropped to the ``data_tile_size`` region nearest the center tile and
+    aligned to the edge of its 3x3 slot that touches the center, so the
+    context immediately surrounding the center stays spatially correct.
+
+    Args:
+        row_idx: Mosaic row (0=top, 1=center, 2=bottom).
+        col_idx: Mosaic column (0=left, 1=center, 2=right).
+        tile_shape: (height, width) of the neighbor tile being placed.
+        data_tile_size: Size of the center tile / each mosaic slot.
+
+    Returns:
+        (src_rows, src_cols, dst_rows, dst_cols) slices.
+    """
+    h, w = tile_shape
+    dts = data_tile_size
+
+    rh = min(h, dts)
+    if row_idx == 0:  # tile above the center: keep its bottom edge
+        src_r = slice(h - rh, h)
+        dst_r = slice(dts - rh, dts)
+    else:  # center / bottom rows: keep the top edge
+        base = row_idx * dts
+        src_r = slice(0, rh)
+        dst_r = slice(base, base + rh)
+
+    cw = min(w, dts)
+    if col_idx == 0:  # tile left of the center: keep its right edge
+        src_c = slice(w - cw, w)
+        dst_c = slice(dts - cw, dts)
+    else:  # center / right cols: keep the left edge
+        base = col_idx * dts
+        src_c = slice(0, cw)
+        dst_c = slice(base, base + cw)
+
+    return src_r, src_c, dst_r, dst_c
+
+
 def create_mosaic_from_tiles(
     neighbors: dict[str, Optional[Path]],
     ir_neighbors: Optional[dict[str, Optional[Path]]] = None,
@@ -288,14 +338,18 @@ def create_mosaic_from_tiles(
             if tile_path is None or not tile_path.exists():
                 continue
 
-            y_start = row_idx * data_tile_size
-            x_start = col_idx * data_tile_size
-
             with rasterio.open(tile_path) as src:
                 if use_ir:
                     r, g = src.read(1), src.read(2)
                 else:
                     r, g, b = src.read(1), src.read(2), src.read(3)
+
+            # Neighbor tiles are not guaranteed to match the center tile's
+            # size, so crop each one to the region adjacent to the center and
+            # place it in the corresponding corner of its slot.
+            src_r, src_c, dst_r, dst_c = _mosaic_slices(
+                row_idx, col_idx, r.shape, data_tile_size
+            )
 
             if use_ir:
                 ir_path = ir_neighbors.get(pos)
@@ -303,38 +357,14 @@ def create_mosaic_from_tiles(
                     with rasterio.open(ir_path) as ir_src:
                         ir = ir_src.read(1)
                 else:
-                    ir = np.zeros((data_tile_size, data_tile_size), dtype=np.uint8)
-                mosaic[
-                    y_start : y_start + data_tile_size,
-                    x_start : x_start + data_tile_size,
-                    0,
-                ] = ir
-                mosaic[
-                    y_start : y_start + data_tile_size,
-                    x_start : x_start + data_tile_size,
-                    1,
-                ] = r
-                mosaic[
-                    y_start : y_start + data_tile_size,
-                    x_start : x_start + data_tile_size,
-                    2,
-                ] = g
+                    ir = np.zeros(r.shape, dtype=np.uint8)
+                mosaic[dst_r, dst_c, 0] = ir[src_r, src_c]
+                mosaic[dst_r, dst_c, 1] = r[src_r, src_c]
+                mosaic[dst_r, dst_c, 2] = g[src_r, src_c]
             else:
-                mosaic[
-                    y_start : y_start + data_tile_size,
-                    x_start : x_start + data_tile_size,
-                    0,
-                ] = r
-                mosaic[
-                    y_start : y_start + data_tile_size,
-                    x_start : x_start + data_tile_size,
-                    1,
-                ] = g
-                mosaic[
-                    y_start : y_start + data_tile_size,
-                    x_start : x_start + data_tile_size,
-                    2,
-                ] = b
+                mosaic[dst_r, dst_c, 0] = r[src_r, src_c]
+                mosaic[dst_r, dst_c, 1] = g[src_r, src_c]
+                mosaic[dst_r, dst_c, 2] = b[src_r, src_c]
 
     return mosaic, center_meta, data_tile_size
 
@@ -571,9 +601,9 @@ def parse_args():
     parser.add_argument(
         "--herb_margin",
         type=float,
-        default=3.0,
+        default=0.0,
         help="Herbaceous recovery margin: pixels classified as 'else' where herbaceous "
-        "logit was within this margin get flipped to herbaceous (default: 3.0)",
+        "logit was within this margin get flipped to herbaceous. 0 disables it (default: 0.0)",
     )
     parser.add_argument(
         "--batch_size",
@@ -660,6 +690,7 @@ def main():
         batch_size=args.batch_size,
         use_fp16=not args.no_fp16,
         use_compile=not args.no_compile,
+        use_ir=ir_tile_map is not None,
     )
 
     total_processed = 0

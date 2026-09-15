@@ -55,10 +55,12 @@ def merge_classifications(las_path, flair_path, output_path):
     result[result == 1] = 0
     print(f"  Removed {n_las_class1} LIDAR class 1 pixels")
 
-    # Step 2: Add FLAIR class 1 (herbaceous) - FLAIR is reliable for this class
-    n_flair_class1 = np.sum(flair_data == 1)
-    result[flair_data == 1] = 1
-    print(f"  Added {n_flair_class1} FLAIR class 1 pixels")
+    # Step 2: Add FLAIR class 1 (herbaceous) only where LIDAR has no vegetation
+    # (result == 0).
+    mask_class1 = (flair_data == 1) & (result == 0)
+    n_flair_class1 = np.sum(mask_class1)
+    result[mask_class1] = 1
+    print(f"  Added {n_flair_class1} FLAIR class 1 pixels (only where LIDAR==0)")
 
     # Step 3: Use FLAIR to fill in classes 2 and 3 ONLY where LIDAR is 0
     mask_class2 = (flair_data == 2) & (result == 0)

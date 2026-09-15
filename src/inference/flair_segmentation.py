@@ -11,8 +11,14 @@ from ..flairhub_utils import (
     SIMPLIFIED_CLASSES,
     FlairInference,
     create_weight_map,
+    group_logits_to_4_probs,
     load_flair_model,
-    remap_to_4_classes,
+)
+from ..flairhub_utils.inference import (
+    AERIAL_RGBI_MEANS_IR,
+    AERIAL_RGBI_MEANS_RGB,
+    AERIAL_RGBI_STDS_IR,
+    AERIAL_RGBI_STDS_RGB,
 )
 
 
@@ -28,6 +34,7 @@ class FlairSegmentation:
         batch_size: int = 8,
         use_fp16: bool = True,
         use_compile: bool = True,
+        use_ir: bool = True,
     ):
         """
         Initialize FLAIR segmentation model.
@@ -41,12 +48,18 @@ class FlairSegmentation:
             batch_size: Number of tiles to process simultaneously (default: 8)
             use_fp16: Use FP16 mixed precision for faster inference (default: True)
             use_compile: Use torch.compile for optimization (default: True)
+            use_ir: Whether input tiles are ordered [IR, R, G] (IR checkpoint) or
+                    [R, G, B] (RGB checkpoint). Selects the matching per-channel
+                    normalization statistics (default: True).
         """
         self.checkpoint_path = Path(checkpoint_path)
         self.use_simplified_classes = use_simplified_classes
         self.batch_size = batch_size
         self.use_fp16 = use_fp16 and torch.cuda.is_available()
         self.use_compile = use_compile
+        self.use_ir = use_ir
+        self.norm_means = AERIAL_RGBI_MEANS_IR if use_ir else AERIAL_RGBI_MEANS_RGB
+        self.norm_stds = AERIAL_RGBI_STDS_IR if use_ir else AERIAL_RGBI_STDS_RGB
 
         if device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -69,6 +82,10 @@ class FlairSegmentation:
         print(f"Batch size: {self.batch_size}")
         print(f"FP16: {self.use_fp16}")
         print(f"torch.compile: {self.use_compile}")
+        print(
+            f"Channel order: {'[IR, R, G]' if self.use_ir else '[R, G, B]'}, "
+            f"norm means={self.norm_means.tolist()}, stds={self.norm_stds.tolist()}"
+        )
         if self.use_simplified_classes:
             print("Mode: 4 simplified classes (else, herbaceous, hedge, trees)")
         else:
@@ -134,7 +151,9 @@ class FlairSegmentation:
         Returns:
             Tuple of (class_prob or logits_np, depending on class_id)
         """
-        tile_tensor = FlairInference.preprocess_tile(tile_image, normalize=True)
+        tile_tensor = FlairInference.preprocess_tile(
+            tile_image, normalize=True, means=self.norm_means, stds=self.norm_stds
+        )
         tile_tensor = tile_tensor.to(self.device)
 
         batch = {
@@ -237,7 +256,9 @@ class FlairSegmentation:
         """
         batch_tensors = []
         for tile_image in batch_images:
-            tile_tensor = FlairInference.preprocess_tile(tile_image, normalize=True)
+            tile_tensor = FlairInference.preprocess_tile(
+                tile_image, normalize=True, means=self.norm_means, stds=self.norm_stds
+            )
             batch_tensors.append(tile_tensor)
 
         batch_tensor = torch.cat(batch_tensors, dim=0).to(self.device)
@@ -253,7 +274,7 @@ class FlairSegmentation:
         if self.model is None:
             raise RuntimeError("Model not loaded")
 
-        with torch.cuda.amp.autocast("cuda", enabled=self.use_fp16):
+        with torch.amp.autocast("cuda", enabled=self.use_fp16):
             logits_tasks, _ = self.model(batch)
             logits = logits_tasks["AERIAL_LABEL-COSIA"]
 
@@ -348,6 +369,52 @@ class FlairSegmentation:
                 )
             return output_logits
 
+    def _logits_to_class_map(
+        self,
+        output_logits: np.ndarray,
+        class_logit_bias: Optional[dict[int, float]] = None,
+        herbaceous_recovery_margin: Optional[float] = None,
+    ) -> np.ndarray:
+        """Turn blended per-class logits into a 4-class simplified class map.
+
+        For a 19-class checkpoint the fine-class softmax probabilities are
+        grouped into the 4 simplified classes (see ``group_logits_to_4_probs``)
+        *before* argmax, so multi-headed classes such as trees aren't beaten by
+        vote splitting. Bias and the herbaceous-recovery margin are then applied
+        in that 4-class space — where index 1 is genuinely herbaceous — instead
+        of on raw 19-class logits where index 1 is greenhouse.
+
+        Args:
+            output_logits: Blended logits (H, W, num_classes).
+            class_logit_bias: Dict mapping simplified class_id (0-3) to a bias
+                added before argmax, in log-probability units.
+            herbaceous_recovery_margin: If set, "else" pixels whose herbaceous
+                score is within this margin of the else score flip to herbaceous.
+
+        Returns:
+            Class map (H, W) uint8 with values 0-3.
+        """
+        if self.num_classes == 19 and self.use_simplified_classes:
+            # Group into 4 classes, then work in log-prob space so bias / margin
+            # keep the same (log-odds) units they had on raw logits.
+            scores = np.log(group_logits_to_4_probs(output_logits) + 1e-8)
+        else:
+            scores = output_logits
+
+        if class_logit_bias:
+            for cid, bias in class_logit_bias.items():
+                scores[:, :, cid] += bias
+
+        class_map = np.argmax(scores, axis=2).astype(np.uint8)
+
+        if herbaceous_recovery_margin is not None and herbaceous_recovery_margin > 0:
+            else_pixels = class_map == 0
+            logit_diff = scores[:, :, 0] - scores[:, :, 1]
+            close_to_herbaceous = logit_diff < herbaceous_recovery_margin
+            class_map[else_pixels & close_to_herbaceous] = 1
+
+        return class_map
+
     @torch.no_grad()
     def segment_array(
         self,
@@ -415,22 +482,9 @@ class FlairSegmentation:
         if class_id is not None:
             return (output >= 0.5).astype(np.uint8)
 
-        if class_logit_bias:
-            for cid, bias in class_logit_bias.items():
-                output[:, :, cid] += bias
-
-        class_map = np.argmax(output, axis=2).astype(np.uint8)
-
-        if herbaceous_recovery_margin is not None and herbaceous_recovery_margin > 0:
-            else_pixels = class_map == 0
-            logit_diff = output[:, :, 0] - output[:, :, 1]
-            close_to_herbaceous = logit_diff < herbaceous_recovery_margin
-            class_map[else_pixels & close_to_herbaceous] = 1
-
-        if self.num_classes == 19 and self.use_simplified_classes:
-            class_map = remap_to_4_classes(class_map)
-
-        return class_map
+        return self._logits_to_class_map(
+            output, class_logit_bias, herbaceous_recovery_margin
+        )
 
     @torch.no_grad()
     def segment_image(
@@ -570,20 +624,9 @@ class FlairSegmentation:
         herbaceous_recovery_margin: Optional[float] = None,
     ):
         """Save class map output."""
-        if class_logit_bias:
-            for class_id, bias in class_logit_bias.items():
-                output_logits[:, :, class_id] += bias
-
-        class_map = np.argmax(output_logits, axis=2).astype(np.uint8)
-
-        if herbaceous_recovery_margin is not None and herbaceous_recovery_margin > 0:
-            else_pixels = class_map == 0
-            logit_diff = output_logits[:, :, 0] - output_logits[:, :, 1]
-            close_to_herbaceous = logit_diff < herbaceous_recovery_margin
-            class_map[else_pixels & close_to_herbaceous] = 1
-
-        if self.num_classes == 19 and self.use_simplified_classes:
-            class_map = remap_to_4_classes(class_map)
+        class_map = self._logits_to_class_map(
+            output_logits, class_logit_bias, herbaceous_recovery_margin
+        )
 
         meta.update({"count": 1, "dtype": "uint8", "nodata": 255})
         with rasterio.open(output_path, "w", **meta) as dst:
