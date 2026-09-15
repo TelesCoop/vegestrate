@@ -598,7 +598,9 @@ def main() -> int:
     state_path = Path(config_path).with_name(Path(config_path).stem + "_state.json")
     state = StateManager(state_path, cfg_hash)
 
-    timing_log_path = Path(config_path).with_name(Path(config_path).stem + "_timing.log")
+    timing_log_path = Path(config_path).with_name(
+        Path(config_path).stem + "_timing.log"
+    )
     log_timing(timing_log_path, f"=== Pipeline run started (config={config_path}) ===")
 
     start_time = time.time()

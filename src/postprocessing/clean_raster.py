@@ -97,9 +97,7 @@ def sieve_raster(input_path, output_path, threshold, connectedness=8):
     src_ds = None
 
     band = out_ds.GetRasterBand(1)
-    gdal.SieveFilter(
-        band, None, band, threshold, connectedness, callback=TERM_PROGRESS
-    )
+    gdal.SieveFilter(band, None, band, threshold, connectedness, callback=TERM_PROGRESS)
     out_ds.FlushCache()
     out_ds = None
     print()
@@ -404,9 +402,7 @@ def _reproject_vector(buildings_path, target_wkt, work_dir):
     if source_srs.IsSame(target_srs):
         return buildings_path
 
-    print(
-        f"  Reprojecting footprints {source_srs.GetName()} -> {target_srs.GetName()}"
-    )
+    print(f"  Reprojecting footprints {source_srs.GetName()} -> {target_srs.GetName()}")
     reprojected = os.path.join(work_dir, "buildings_reprojected.gpkg")
     gdal.VectorTranslate(
         reprojected,
@@ -572,7 +568,7 @@ def mask_buildings(input_path, output_path, buildings_path, fill=0, block_size=4
         os.remove(tmp_mask)
 
 
-def main():
+def _build_arg_parser():
     parser = argparse.ArgumentParser(
         description="Clean raster: sieve then mode filter (default) or morphological close (legacy)",
     )
@@ -642,11 +638,10 @@ def main():
         metavar="N",
         help="[Legacy] Erosion disk radius for morphological close. Set > 0 to use instead of mode filter.",
     )
+    return parser
 
-    args = parser.parse_args()
-    use_morph = args.r_dil > 0
-    use_median = args.median_kernel > 0
 
+def _print_config(args, use_morph, use_median):
     print(f"{'=' * 70}")
     if use_median:
         print(
@@ -668,6 +663,47 @@ def main():
         print(f"  Class {TRANSPARENT_CLASS} (else): transparent + class palette")
     print(f"{'=' * 70}\n")
 
+
+def _run_filters(args, clean_output, new_temp, use_morph, use_median):
+    if use_median:
+        median_filter_clean(args.input, clean_output, args.median_kernel)
+    elif use_morph:
+        if args.sieve > 0:
+            tmp_path = new_temp()
+            morphological_clean(args.input, tmp_path, args.r_dil, args.r_er)
+            gc.collect()
+            sieve_raster(tmp_path, clean_output, args.sieve)
+        else:
+            morphological_clean(args.input, clean_output, args.r_dil, args.r_er)
+    elif args.sieve > 0 and args.mode_kernel > 0:
+        tmp_path = new_temp()
+        mode_filter_clean(args.input, tmp_path, args.mode_kernel, args.mode_iterations)
+        gc.collect()
+        sieve_raster(tmp_path, clean_output, args.sieve)
+    elif args.sieve > 0:
+        sieve_raster(args.input, clean_output, args.sieve)
+    elif args.mode_kernel > 0:
+        mode_filter_clean(
+            args.input, clean_output, args.mode_kernel, args.mode_iterations
+        )
+    else:
+        src_ds = gdal.Open(args.input)
+        driver = gdal.GetDriverByName("GTiff")
+        driver.CreateCopy(
+            clean_output,
+            src_ds,
+            options=["COMPRESS=DEFLATE", "TILED=YES", "BIGTIFF=YES"],
+        )
+        src_ds = None
+
+
+def main():
+    args = _build_arg_parser().parse_args()
+    use_morph = args.r_dil > 0
+    use_median = args.median_kernel > 0
+
+    _print_config(args, use_morph, use_median)
+
     tmp_paths = []
 
     def new_temp():
@@ -680,39 +716,7 @@ def main():
     clean_output = new_temp() if args.buildings else args.output
 
     try:
-        if use_median:
-            median_filter_clean(args.input, clean_output, args.median_kernel)
-        elif use_morph:
-            if args.sieve > 0:
-                tmp_path = new_temp()
-                morphological_clean(args.input, tmp_path, args.r_dil, args.r_er)
-                gc.collect()
-                sieve_raster(tmp_path, clean_output, args.sieve)
-            else:
-                morphological_clean(args.input, clean_output, args.r_dil, args.r_er)
-        else:
-            if args.sieve > 0 and args.mode_kernel > 0:
-                tmp_path = new_temp()
-                mode_filter_clean(
-                    args.input, tmp_path, args.mode_kernel, args.mode_iterations
-                )
-                gc.collect()
-                sieve_raster(tmp_path, clean_output, args.sieve)
-            elif args.sieve > 0:
-                sieve_raster(args.input, clean_output, args.sieve)
-            elif args.mode_kernel > 0:
-                mode_filter_clean(
-                    args.input, clean_output, args.mode_kernel, args.mode_iterations
-                )
-            else:
-                src_ds = gdal.Open(args.input)
-                driver = gdal.GetDriverByName("GTiff")
-                driver.CreateCopy(
-                    clean_output,
-                    src_ds,
-                    options=["COMPRESS=DEFLATE", "TILED=YES", "BIGTIFF=YES"],
-                )
-                src_ds = None
+        _run_filters(args, clean_output, new_temp, use_morph, use_median)
 
         if args.buildings:
             gc.collect()

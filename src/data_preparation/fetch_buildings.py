@@ -10,7 +10,7 @@ from rasterio.warp import transform_bounds
 
 BDTOPO_URL = "https://data.geopf.fr/wfs/ows"
 TYPENAME = "BDTOPO_V3:batiment"
-WFS_CRS = "EPSG:2154" 
+WFS_CRS = "EPSG:2154"
 PAGE_SIZE = 5000
 DATE_COLUMNS = ("date_d_apparition", "date_dapparition", "date_de_confirmation")
 
@@ -147,8 +147,12 @@ def main():
         help="Keep only buildings that appeared before this date, for diachronic runs. "
         "Buildings with no recorded date are kept.",
     )
-    parser.add_argument("--url", default=BDTOPO_URL, help=f"WFS URL (default: {BDTOPO_URL})")
-    parser.add_argument("--typename", default=TYPENAME, help=f"Layer (default: {TYPENAME})")
+    parser.add_argument(
+        "--url", default=BDTOPO_URL, help=f"WFS URL (default: {BDTOPO_URL})"
+    )
+    parser.add_argument(
+        "--typename", default=TYPENAME, help=f"Layer (default: {TYPENAME})"
+    )
     args = parser.parse_args()
 
     if Path(args.output).exists():
