@@ -1,6 +1,7 @@
 import argparse
 import time
-from multiprocessing import Pool
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures.process import BrokenProcessPool
 
 import numpy as np
 import pandas as pd
@@ -18,6 +19,7 @@ from audit.common import (
 )
 
 STATE = {}
+MAX_ATTEMPTS = 3
 
 
 def dims(inputs):
@@ -137,6 +139,17 @@ def to_frame(acc, names, sizes):
     return df
 
 
+def accumulate(store, res):
+    if res is None:
+        return
+    zone, poly, edge, patches = res
+    tallies = [("zones", zone), ("polygones", poly)]
+    tallies += [(f"bord_{lv}", side) for lv, sides in edge.items() for side in sides]
+    tallies += [(f"taches_{lv}", tal) for lv, tal in patches.items()]
+    for name, (keys, counts) in tallies:
+        store[name][keys] += counts
+
+
 def main():
     parser = argparse.ArgumentParser(description="Comptages pixel EVA x Vegestrate")
     parser.add_argument("--config", default="audit/config.yaml")
@@ -163,20 +176,32 @@ def main():
         for name, (_, sizes, _) in specs.items()
     }
     start = time.time()
-    with Pool(cfg["processing"]["workers"]) as pool:
-        for i, res in enumerate(pool.imap_unordered(process, blocks), 1):
-            if res is not None:
-                zone, poly, edge, patches = res
-                tallies = [("zones", zone), ("polygones", poly)]
-                tallies += [
-                    (f"bord_{lv}", side) for lv, sides in edge.items() for side in sides
-                ]
-                tallies += [(f"taches_{lv}", tal) for lv, tal in patches.items()]
-                for name, (keys, counts) in tallies:
-                    store[name][keys] += counts
-            if i % 50 == 0 or i == len(blocks):
-                el = time.time() - start
-                print(f"{i}/{len(blocks)} blocks, {el / 60:.1f} min", flush=True)
+    pending = set(blocks)
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            with ProcessPoolExecutor(cfg["processing"]["workers"]) as pool:
+                futures = {pool.submit(process, b): b for b in pending}
+                for fut in as_completed(futures):
+                    accumulate(store, fut.result())
+                    pending.discard(futures[fut])
+                    done = len(blocks) - len(pending)
+                    if done % 50 == 0 or not pending:
+                        el = time.time() - start
+                        print(
+                            f"{done}/{len(blocks)} blocks, {el / 60:.1f} min",
+                            flush=True,
+                        )
+        except BrokenProcessPool:
+            print(
+                f"worker died (attempt {attempt}), {len(pending)} blocks left",
+                flush=True,
+            )
+        if not pending:
+            break
+    if pending:
+        raise RuntimeError(
+            f"{len(pending)} blocks failed after {MAX_ATTEMPTS} attempts"
+        )
     for name, (names, sizes, filename) in specs.items():
         to_frame(store[name], names, sizes).to_csv(
             output_path(cfg, filename), index=False
