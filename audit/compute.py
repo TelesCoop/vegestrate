@@ -151,7 +151,7 @@ def accumulate(store, res):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Comptages pixel EVA x Vegestrate")
+    parser = argparse.ArgumentParser(description="Comptages pixel EVA x Végéstrate")
     parser.add_argument("--config", default="audit/config.yaml")
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args()

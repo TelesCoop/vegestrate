@@ -1,9 +1,13 @@
 import numpy as np
+import pandas as pd
 
+from audit.figures import colorize
 from audit.common import (
     CHM_NODATA,
     HBIN_UNKNOWN,
     distance_bins,
+    hbin,
+    pick,
     pontius,
     small_patches,
     stratum,
@@ -28,6 +32,13 @@ def check_stratum():
     cut = {"shrub_min": 1, "tree_min": 4}
     assert stratum(native, hbins).tolist() == native.tolist()
     assert stratum(native, hbins, cut).tolist() == [0, 1, 1, 1, 2, 3, 2, 2, 3]
+
+
+def check_hbin():
+    native = np.array([0, 1, 2, 2, 3, 3, 3])
+    chm = np.array([0, 0, 0, 2, 0, 9, CHM_NODATA])
+    unknown = HBIN_UNKNOWN
+    assert hbin(native, chm).tolist() == [0, 0, unknown, 2, unknown, 5, unknown]
 
 
 def check_zone_median_height():
@@ -57,9 +68,32 @@ def check_small_patches():
     assert not small[0, 7:].any()
 
 
+def check_colorize():
+    cats = [(1, "a", "#ff0000"), (2, "b", "#00ff00"), (3, "c", "#0000ff")]
+    rgba = colorize(np.array([[1, 2, 3, 255]]), cats, nodata=255, transparent={3})
+    assert rgba[0, 0].tolist() == [255, 0, 0, 255]
+    assert rgba[0, 1].tolist() == [0, 255, 0, 255]
+    assert rgba[0, 2, 3] == 0
+    assert rgba[0, 3, 3] == 0
+
+
+def check_pick():
+    df = pd.DataFrame({"niveau": ["vegetation"], "v": [1]})
+    assert pick(df, niveau="vegetation")["v"].tolist() == [1]
+    try:
+        pick(df, niveau="strates")
+    except KeyError as e:
+        assert "strates" in str(e)
+    else:
+        raise AssertionError
+
+
 if __name__ == "__main__":
+    check_colorize()
+    check_pick()
     check_pontius()
     check_stratum()
+    check_hbin()
     check_zone_median_height()
     check_distance_bins()
     check_small_patches()

@@ -26,9 +26,9 @@ STRATA_CATEGORIES = [
 ]
 
 VEGETATION_CATEGORIES = [
-    (1, "Végétal pour EVA et Vegestrate", "#1a7f37"),
+    (1, "Végétal pour EVA et Végéstrate", "#1a7f37"),
     (2, "Végétal pour EVA seul", "#e66101"),
-    (3, "Végétal pour Vegestrate seul", "#5e3c99"),
+    (3, "Végétal pour Végéstrate seul", "#5e3c99"),
     (4, "Non végétal pour les deux", "#e0e0e0"),
     (5, "EVA non comparable", "#f4c2f4"),
 ]
@@ -36,10 +36,10 @@ VEGETATION_CATEGORIES = [
 STRATES_CATEGORIES = [
     (1, "Même strate", "#1a7f37"),
     (2, "Végétal pour les deux, strate différente", "#fdb863"),
-    (3, "EVA boisé multistrate, Vegestrate ligneux", "#4dac26"),
-    (4, "EVA boisé multistrate, Vegestrate herbe", "#b8e186"),
+    (3, "EVA boisé multistrate, Végéstrate ligneux", "#4dac26"),
+    (4, "EVA boisé multistrate, Végéstrate herbe", "#b8e186"),
     (5, "Végétal pour EVA seul", "#e66101"),
-    (6, "Végétal pour Vegestrate seul", "#5e3c99"),
+    (6, "Végétal pour Végéstrate seul", "#5e3c99"),
     (7, "Non végétal pour les deux", "#e0e0e0"),
     (8, "EVA non comparable", "#f4c2f4"),
 ]
@@ -127,6 +127,20 @@ def classify(d, inputs, cfg):
     return {k: np.where(valid, v, NODATA).astype(np.uint8) for k, v in rasters.items()}
 
 
+def raster_categories(cfg):
+    eva_categories = [
+        (i + 1, spec["label"], EVA_COLORS[g])
+        for i, (g, spec) in enumerate(cfg["eva_groups"].items())
+    ]
+    return {
+        "eva_groupes": eva_categories,
+        "vegestrate_natif": STRATA_CATEGORIES,
+        "vegestrate_recoupe": STRATA_CATEGORIES,
+        "accord_vegetation": VEGETATION_CATEGORIES,
+        "accord_strates": STRATES_CATEGORIES,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description="Rasters d'exemple sur 5 lieux")
     parser.add_argument("--config", default="audit/config.yaml")
@@ -135,17 +149,7 @@ def main():
     inputs = Inputs(cfg)
     out_dir = output_path(cfg, "exemples")
     out_dir.mkdir(exist_ok=True)
-    eva_categories = [
-        (i + 1, spec["label"], EVA_COLORS[g])
-        for i, (g, spec) in enumerate(cfg["eva_groups"].items())
-    ]
-    categories = {
-        "eva_groupes": eva_categories,
-        "vegestrate_natif": STRATA_CATEGORIES,
-        "vegestrate_recoupe": STRATA_CATEGORIES,
-        "accord_vegetation": VEGETATION_CATEGORIES,
-        "accord_strates": STRATES_CATEGORIES,
-    }
+    categories = raster_categories(cfg)
     pixel_m2 = inputs.transform.a**2
     rows = []
     for place, spec in cfg["places"].items():

@@ -63,17 +63,22 @@ def export_zones(cfg):
 
 
 def fetch_alpha(cfg, x0, y1, size_px):
+    res = cfg["exclusion"]["resolution"]
+    bbox = (x0, y1 - size_px * res, x0 + size_px * res, y1)
+    return fetch_wms(cfg, bbox, size_px, size_px)[..., 3]
+
+
+def fetch_wms(cfg, bbox, width, height):
     ex = cfg["exclusion"]
-    res = ex["resolution"]
     params = {
         "SERVICE": "WMS",
         "VERSION": "1.3.0",
         "REQUEST": "GetMap",
         "LAYERS": ex["wms_layer"],
         "CRS": cfg["crs"],
-        "BBOX": f"{x0},{y1 - size_px * res},{x0 + size_px * res},{y1}",
-        "WIDTH": size_px,
-        "HEIGHT": size_px,
+        "BBOX": ",".join(str(v) for v in bbox),
+        "WIDTH": width,
+        "HEIGHT": height,
         "FORMAT": "image/png",
         "TRANSPARENT": "TRUE",
         "STYLES": "",
@@ -82,7 +87,7 @@ def fetch_alpha(cfg, x0, y1, size_px):
     response.raise_for_status()
     if "image" not in response.headers.get("Content-Type", ""):
         raise RuntimeError(response.text[:500])
-    return np.array(Image.open(BytesIO(response.content)).convert("RGBA"))[..., 3]
+    return np.array(Image.open(BytesIO(response.content)).convert("RGBA"))
 
 
 def trace_exclusion(cfg):

@@ -46,6 +46,15 @@ class EvaClasses:
         return np.isin(group_idx, wanted)
 
 
+def pick(df, **filters):
+    sel = df
+    for column, value in filters.items():
+        sel = sel[sel[column] == value]
+    if sel.empty:
+        raise KeyError(f"no row for {filters}")
+    return sel
+
+
 def zone_median_height(native, chm):
     out = np.full(native.shape, CHM_NODATA, dtype=np.int16)
     measured = chm != CHM_NODATA
@@ -71,7 +80,8 @@ HEIGHT_SOURCES = {"pixel": lambda native, chm: chm, "zone_median": zone_median_h
 
 def hbin(native, chm):
     woody = native >= 2
-    h = np.where(chm == CHM_NODATA, HBIN_UNKNOWN, np.clip(chm, 0, 5))
+    unmeasured = (chm == CHM_NODATA) | (chm <= 0)
+    h = np.where(unmeasured, HBIN_UNKNOWN, np.clip(chm, 0, 5))
     return np.where(woody, h, 0).astype(np.uint8)
 
 

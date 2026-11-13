@@ -149,3 +149,32 @@ places:
     label: Grand parc urbain, Parc de la Tête d'Or
     center: [1844167, 5176949]
 place_size_m: 1000
+
+figures:
+  dpi: 150
+  web_dpi: 100
+  jpeg_quality: 85
+  web_px: 800
+  overlay_alpha: 0.75
+  zoom_size_m: 150
+  zoom_px: 400
+  zooms:
+    alignements:
+      place: presquile
+      center: [1842504, 5174667]
+    bords:
+      place: tassin
+      center: [1836968, 5175450]
+    arbustes:
+      place: tete_or
+      center: [1843910, 5176586]
+
+publish:
+  pdf: rapport_eva_vegestrate_2023.pdf
+  title: "Audit comparatif EVA 2023 / Végéstrate 2023"
+  targets:
+    - dir: /home/ludo/repos/iarbre-back/docs/methodology/eva_vegestrate_2023
+      markdown: index.md
+    - dir: /home/ludo/repos/iarbre-website/website/content/vegestrate
+      markdown: null
+      figures: ["*_eva.jpg", "*_vegestrate.jpg", "zoom_*.jpg", "legende.json"]

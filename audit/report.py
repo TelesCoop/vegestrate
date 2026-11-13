@@ -6,7 +6,15 @@ import numpy as np
 import pandas as pd
 import pyogrio
 
-from audit.common import STRATA, EvaClasses, load_config, output_path, pontius, stratum
+from audit.common import (
+    STRATA,
+    EvaClasses,
+    load_config,
+    output_path,
+    pick,
+    pontius,
+    stratum,
+)
 
 PIXEL_M2 = 0.04
 
@@ -35,7 +43,6 @@ class Cubes:
         z["km2"] = z["pixels"] * PIXEL_M2 / 1e6
         self.excluded = z[z["exclu"] == 1]
         self.zones = z[(z["exclu"] == 0) & (z["cod3"] > 0)]
-        self.eva_absent_km2 = z[(z["exclu"] == 0) & (z["cod3"] == 0)]["km2"].sum()
 
     def labels(self, level, version):
         spec = self.cfg["levels"][level]
@@ -269,7 +276,7 @@ def exclusion(cubes):
     eva.insert(0, "source", "EVA")
     eva = eva.rename(columns={"groupe": "classe"})
     veg = x.groupby("strate_natif")["km2"].sum().rename("surface_km2").reset_index()
-    veg.insert(0, "source", "Vegestrate")
+    veg.insert(0, "source", "Végéstrate")
     veg = veg.rename(columns={"strate_natif": "classe"})
     return pd.concat([eva, veg])
 
@@ -296,95 +303,85 @@ def md_table(df, percent=()):
     return "\n".join([head, sep, *lines])
 
 
-def matrix_md(mat, level, version, share):
-    m = mat[(mat["niveau"] == level) & (mat["version_vegestrate"] == version)]
-    t = m.pivot(index="classe_eva", columns="classe_vegestrate", values=share)
-    order = list(dict.fromkeys(m["classe_eva"]))
-    t = t.reindex(index=order, columns=order)
-    t.index.name = "EVA \\ Vegestrate"
-    return md_table(t.reset_index(), percent=order)
+def value(df, column, **filters):
+    return pick(df, **filters)[column].iloc[0]
 
 
-def km2_md(mat, level, version):
-    m = mat[(mat["niveau"] == level) & (mat["version_vegestrate"] == version)]
-    order = list(dict.fromkeys(m["classe_eva"]))
-    t = m.pivot(index="classe_eva", columns="classe_vegestrate", values="surface_km2")
-    t = t.reindex(index=order, columns=order)
-    t.index.name = "EVA \\ Vegestrate (km²)"
-    return md_table(t.reset_index())
-
-
-def render(
-    cfg, cubes, mat, metrics, rules, edge, patch, communes, lcz_t, excl, examples
-):
-    metric_cols = ["accord", "desaccord_quantite", "desaccord_allocation"]
-    blocks = {}
-    for level in cfg["levels"]:
-        parts = []
-        for version in cubes.level_versions(level):
-            parts.append(f"**Version Vegestrate : {version}**\n")
-            parts.append(km2_md(mat, level, version) + "\n")
-            parts.append("Part de chaque classe EVA (lignes) :\n")
-            parts.append(matrix_md(mat, level, version, "part_de_la_classe_eva") + "\n")
-            parts.append("Part de chaque classe Vegestrate (colonnes) :\n")
-            parts.append(
-                matrix_md(mat, level, version, "part_de_la_classe_vegestrate") + "\n"
-            )
-        blocks[f"matrices_{level}"] = "\n".join(parts)
-    rules_t = rules[
-        [
-            "code_eva",
-            "version_vegestrate",
-            "regle",
-            "page_guide",
-            "polygones",
-            "part_polygones_conformes",
+def summary(cfg, metrics, rules, edge, patch):
+    acc = metrics.set_index(["niveau", "version_vegestrate"])["accord"]
+    strata_variants = acc["strates"][list(cfg["height_cuts"])]
+    labels = distance_labels(cfg["edge_distance_bins_m"])
+    near, far = labels[0], labels[-1]
+    shares = {
+        "accord_vegetation": acc["vegetation", "natif"],
+        "accord_vegetation_nc": acc["vegetation_avec_non_comparable", "natif"],
+        "accord_ligneux": acc["ligneux_herbace", "principal"],
+        "accord_strates": acc["strates", "principal"],
+        "strates_min": strata_variants.min(),
+        "strates_max": strata_variants.max(),
+        "taches_vegetation": value(
+            patch, "part_petites_taches", niveau="vegetation", groupe_eva="total"
+        ),
+        "taches_ligneux_non_vegetal": value(
+            patch, "part_petites_taches", niveau="ligneux", groupe_eva="non_vegetal"
+        ),
+    }
+    for code in (111, 112, 311):
+        shares[f"conforme_{code}"] = value(
+            rules,
             "part_surface_conforme",
-            "mediane",
-        ]
+            code_eva=code,
+            version_vegestrate="principal",
+        )
+    for key, side, dist in (
+        ("dans_pres", "dans EVA", near),
+        ("dans_loin", "dans EVA", far),
+        ("hors_pres", "hors EVA", near),
+        ("hors_loin", "hors EVA", far),
+    ):
+        shares[f"bord_{key}"] = value(
+            edge,
+            "part_vegestrate_positif",
+            niveau="vegetation",
+            cote=side,
+            distance_au_bord=dist,
+        )
+    return {
+        **{k: pct(v) for k, v in shares.items()},
+        "bord_pres": cfg["edge_distance_bins_m"][0],
+        "bord_loin": cfg["edge_distance_bins_m"][-1],
+        "taches_ligneux_non_vegetal_km2": fmt(
+            value(
+                patch,
+                "surface_petites_taches_km2",
+                niveau="ligneux",
+                groupe_eva="non_vegetal",
+            )
+        ),
+    }
+
+
+def render(cfg, cubes, metrics, rules, edge, patch):
+    metric_cols = ["accord", "desaccord_quantite", "desaccord_allocation"]
+    shown = metrics[
+        metrics["version_vegestrate"].isin(["natif", "principal"])
+        & (metrics["niveau"] != "vegetation_avec_non_comparable")
     ]
-    top = communes.sort_values("surface_km2", ascending=False)
-    communes_t = top[
-        [
-            "commune",
-            "surface_comparable_vegetal_km2",
-            "part_vegetal_eva",
-            "part_vegetal_vegestrate",
-            "part_ligneux_eva",
-            "part_ligneux_vegestrate",
-        ]
-    ]
+    principal = cfg["height_cuts"]["principal"]
     values = {
-        **blocks,
+        **summary(cfg, metrics, rules, edge, patch),
         "indicateurs": md_table(
-            metrics[
+            shown[
                 ["niveau", "version_vegestrate", "surface_km2", *metric_cols, "kappa"]
             ],
             percent=metric_cols,
         ),
-        "regles": md_table(
-            rules_t,
-            percent=["part_polygones_conformes", "part_surface_conforme", "mediane"],
-        ),
-        "bords": md_table(edge, percent=["part_vegestrate_positif"]),
-        "taches": md_table(patch, percent=["part_petites_taches"]),
-        "communes": md_table(
-            communes_t,
-            percent=[
-                "part_vegetal_eva",
-                "part_vegetal_vegestrate",
-                "part_ligneux_eva",
-                "part_ligneux_vegestrate",
-            ],
-        ),
-        "lcz": md_table(
-            lcz_t[["niveau", "lcz", "surface_km2", *metric_cols]], percent=metric_cols
-        ),
-        "exclusion": md_table(excl),
         "exclusion_km2": fmt(cubes.excluded["km2"].sum()),
-        "eva_absente_km2": fmt(cubes.eva_absent_km2),
         "domaine_km2": fmt(cubes.zones["km2"].sum()),
-        "exemples": examples,
+        "coupe_principale": principal["label"],
+        "arbuste_min": principal["shrub_min"],
+        "arbre_min": principal["tree_min"],
+        "variantes": ", ".join(f"`{name}`" for name in cfg["height_cuts"]),
         "groupes": md_table(
             pd.DataFrame(
                 [
@@ -399,32 +396,9 @@ def render(
                 ]
             )
         ),
-        "coupes": md_table(
-            pd.DataFrame(
-                [
-                    {
-                        "variante": name,
-                        "arbuste dès (m arrondi)": cut["shrub_min"],
-                        "arbre dès (m arrondi)": cut["tree_min"],
-                        "description": cut["label"],
-                    }
-                    for name, cut in cfg["height_cuts"].items()
-                ]
-            )
-        ),
     }
     template = Template((Path(__file__).parent / "methodology_template.md").read_text())
     Path(cfg["paths"]["methodology"]).write_text(template.substitute(values))
-
-
-def examples_md(cfg):
-    path = output_path(cfg, "exemples_stats.csv")
-    if not path.exists():
-        return "_Rasters d'exemple non encore produits (`python -m audit.examples`)._"
-    e = pd.read_csv(path)
-    e = e[e["raster"] == "accord_strates"]
-    t = e.pivot(index="categorie", columns="libelle_lieu", values="part").reset_index()
-    return md_table(t, percent=list(t.columns[1:]))
 
 
 def main():
@@ -454,19 +428,7 @@ def main():
     }
     for name, df in tables.items():
         df.to_csv(output_path(cfg, name), index=False)
-    render(
-        cfg,
-        cubes,
-        mat,
-        metrics,
-        rules,
-        edge,
-        patch,
-        communes,
-        lcz_t,
-        excl,
-        examples_md(cfg),
-    )
+    render(cfg, cubes, metrics, rules, edge, patch)
     print(f"tables -> {cfg['paths']['output_dir']}, {cfg['paths']['methodology']}")
 
 
