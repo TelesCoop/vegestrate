@@ -1,0 +1,113 @@
+@page {
+  size: A4;
+  margin: 18mm 16mm 20mm;
+  @bottom-right {
+    content: counter(page) " / " counter(pages);
+    font-size: 8pt;
+    color: #32412d;
+  }
+}
+
+body {
+  font-family: "DejaVu Sans", sans-serif;
+  font-size: 9.5pt;
+  line-height: 1.45;
+  color: #1f2a1c;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+h1 {
+  font-size: 18pt;
+  color: #32412d;
+  border-bottom: 2px solid #c4ab66;
+  padding-bottom: 4pt;
+  margin-top: 0;
+}
+
+h2 {
+  font-size: 13pt;
+  color: #32412d;
+  margin-top: 16pt;
+  break-after: avoid;
+}
+
+h3 {
+  font-size: 10.5pt;
+  color: #32412d;
+  break-after: avoid;
+}
+
+h2#données {
+  break-before: page;
+}
+
+p, li {
+  orphans: 3;
+  widows: 3;
+}
+
+img {
+  max-width: 100%;
+  max-height: 90mm;
+  display: block;
+  margin: 6pt auto;
+}
+
+figure {
+  margin: 6pt 0;
+  break-inside: avoid;
+}
+
+figcaption {
+  font-size: 8pt;
+  color: #555;
+  text-align: center;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 7.5pt;
+  margin: 6pt 0;
+  break-inside: avoid;
+}
+
+th {
+  background: #32412d;
+  color: #faf3e1;
+  text-align: left;
+}
+
+th, td {
+  padding: 2pt 4pt;
+  border-bottom: 0.5pt solid #97b090;
+}
+
+code {
+  font-size: 8pt;
+  background: #faf3e1;
+  padding: 0 2pt;
+}
+
+pre {
+  background: #faf3e1;
+  padding: 6pt;
+}
+
+img[src*="matrice_"] {
+  display: inline-block;
+  width: 31%;
+  max-height: none;
+  margin: 0 0.5%;
+  vertical-align: top;
+}
+
+img[src$="lieux.jpg"] {
+  max-height: 175mm;
+}
+
+img[src$="zone_exclue.jpg"] {
+  max-height: 70mm;
+}
