@@ -1,0 +1,180 @@
+paths:
+  iarbre_back_dir: /home/ludo/repos/iarbre-back/back
+  eva: /home/ludo/repos/iarbre-back/back/file_data/EVA2023.gpkg
+  eva_layer: eva2023
+  vegestrate: /home/ludo/repos/iarbre-back/back/media/rasters/WMS/vegestrate_02_2023.tif
+  chm: /home/ludo/repos/iarbre-back/back/media/rasters/WMS/vegestrate_02_2023_elevation.tif
+  output_dir: /home/ludo/repos/iarbre-back/back/output/eva_vegestrate_2023/audit
+  methodology: audit/METHODOLOGY.md
+
+crs: EPSG:3946
+
+processing:
+  block_size: 2048
+  halo_px: 100
+  workers: 4
+
+sources:
+  guide: "Geofit, Guide de photo-interprétation des données EVA, Métropole de Lyon, version 1"
+  vegestrate_merge: "src/postprocessing/merge_classifications.py"
+  vegestrate_chm: "src/core/utils.py (nDSM arrondi au mètre, np.round)"
+  vegestrate_lidar: "README.md (classes LiDAR 4 = 1,5-5 m, 5 et 8 = > 5 m)"
+
+exclusion:
+  wms_url: https://imagerie.data.grandlyon.com/geoserver/grandlyon/wms
+  wms_layer: ortho_2023
+  search_bbox: [1836900, 5182700, 1840300, 5186900]
+  resolution: 0.5
+  tile_px: 2000
+  source: "pixels transparents de l'orthophotographie Grand Lyon 2023 (WMS ortho_2023) sur le camp militaire du Mont Verdun"
+
+vegestrate_classes:
+  0: aucune
+  1: herbacee
+  2: moyenne
+  3: haute
+
+eva_groups:
+  arbore:
+    label: Strate arborée (> 3 m)
+    codes: [111]
+  arbustif:
+    label: Strate arbustive (1-3 m)
+    codes: [112]
+  herbace:
+    label: Herbacé
+    codes: [113, 221, 222, 223, 224, 225, 361, 362, 411]
+  boise_mixte:
+    label: Boisé multistrate (forêts, haies, fourrés)
+    codes: [241, 311, 312, 321, 322, 331, 341, 342, 351, 371, 372, 374]
+  non_vegetal:
+    label: Non végétalisé
+    codes: [121, 122, 381, 382]
+  eau:
+    label: Eau
+    codes: [511, 521, 522, 523, 524, 525, 531, 532, 533]
+  non_comparable:
+    label: Non comparable (usage du sol, strates mêlées, cultures)
+    codes: [114, 115, 211, 212, 213, 214, 215, 231, 412]
+
+guide_pages: {111: 3, 112: 4, 113: 5, 114: 6, 115: 7, 121: 8, 122: 9, 211: 10, 212: 11, 213: 12, 214: 13, 215: 14, 221: 15, 222: 16, 223: 17, 224: 18, 225: 19, 231: 20, 241: 21, 311: 22, 312: 23, 321: 24, 322: 25, 331: 26, 341: 27, 342: 28, 351: 29, 361: 30, 362: 31, 371: 32, 372: 33, 374: 34, 381: 35, 382: 36, 411: 37, 412: 38, 511: 39, 521: 40, 522: 41, 523: 42, 524: 43, 525: 44, 531: 45, 532: 46, 533: 47}
+
+levels:
+  vegetation:
+    eva:
+      vegetal: [arbore, arbustif, herbace, boise_mixte]
+      non_vegetal: [non_vegetal, eau]
+    vegestrate:
+      vegetal: [herbe, arbuste, arbre]
+      non_vegetal: [aucune]
+  vegetation_avec_non_comparable:
+    eva:
+      vegetal: [arbore, arbustif, herbace, boise_mixte, non_comparable]
+      non_vegetal: [non_vegetal, eau]
+    vegestrate:
+      vegetal: [herbe, arbuste, arbre]
+      non_vegetal: [aucune]
+  ligneux_herbace:
+    eva:
+      ligneux: [arbore, arbustif, boise_mixte]
+      herbace: [herbace]
+      non_vegetal: [non_vegetal, eau]
+    vegestrate:
+      ligneux: [arbuste, arbre]
+      herbace: [herbe]
+      non_vegetal: [aucune]
+  strates:
+    eva:
+      arbre: [arbore]
+      arbuste: [arbustif]
+      herbe: [herbace]
+      non_vegetal: [non_vegetal, eau]
+    vegestrate:
+      arbre: [arbre]
+      arbuste: [arbuste]
+      herbe: [herbe]
+      non_vegetal: [aucune]
+
+height_source: zone_median
+
+height_cuts:
+  principal:
+    shrub_min: 1
+    tree_min: 4
+    label: "lecture littérale sur hauteurs arrondies : < 1 m herbe, 1 à 3 m arbuste, > 3 m arbre"
+  seuils_bas:
+    shrub_min: 1
+    tree_min: 3
+    label: "sensibilité : arbre dès 3 m arrondi (hauteur réelle >= 2,5 m)"
+  seuils_hauts:
+    shrub_min: 2
+    tree_min: 4
+    label: "sensibilité : arbuste dès 2 m arrondi (hauteur réelle >= 1,5 m)"
+
+native_strata:
+  1: herbe
+  2: arbuste
+  3: arbre
+
+cover_rules:
+  111: {target: arbre, op: ge, value: 0.75}
+  112: {target: arbuste, op: ge, value: 0.75}
+  113: {target: herbe, op: ge, value: 0.75}
+  311: {target: ligneux, op: ge, value: 0.75}
+  312: {target: ligneux, op: ge, value: 0.60}
+  321: {target: ligneux, op: ge, value: 0.75}
+  322: {target: ligneux, op: ge, value: 0.60}
+  341: {target: ligneux, op: ge, value: 0.75}
+  351: {target: ligneux, op: ge, value: 0.75}
+  361: {target: ligneux, op: lt, value: 0.25}
+
+edge_distance_bins_m: [1, 2, 3, 5, 10]
+
+small_patch_area_m2: 100
+
+places:
+  presquile:
+    label: Centre-ville, Presqu'île (Lyon 2e)
+    center: [1842412, 5175092]
+  tassin:
+    label: Périurbain pavillonnaire, Tassin-la-Demi-Lune
+    center: [1837198, 5175513]
+  monts_or:
+    label: Campagne, Monts d'Or (hors camp militaire)
+    center: [1841692, 5186508]
+  vallee_chimie:
+    label: Industrie, Vallée de la chimie (Saint-Fons)
+    center: [1843888, 5168883]
+  tete_or:
+    label: Grand parc urbain, Parc de la Tête d'Or
+    center: [1844167, 5176949]
+place_size_m: 1000
+
+figures:
+  dpi: 150
+  web_dpi: 100
+  jpeg_quality: 85
+  web_px: 800
+  overlay_alpha: 0.75
+  zoom_size_m: 150
+  zoom_px: 400
+  zooms:
+    alignements:
+      place: presquile
+      center: [1842504, 5174667]
+    bords:
+      place: tassin
+      center: [1836968, 5175450]
+    arbustes:
+      place: tete_or
+      center: [1843910, 5176586]
+
+publish:
+  pdf: rapport_eva_vegestrate_2023.pdf
+  title: "Audit comparatif EVA 2023 / Végéstrate 2023"
+  targets:
+    - dir: /home/ludo/repos/iarbre-back/docs/methodology/eva_vegestrate_2023
+      markdown: index.md
+    - dir: /home/ludo/repos/iarbre-website/website/content/vegestrate
+      markdown: null
+      figures: ["*_eva.jpg", "*_vegestrate.jpg", "zoom_*.jpg", "legende.json"]

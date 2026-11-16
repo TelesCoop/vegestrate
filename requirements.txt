@@ -3,6 +3,7 @@
 geopandas>=0.10.0
 humanize>=3.0.0
 laspy[lazrs]>=2.0.0
+matplotlib>=3.8
 numpy>=1.21.0
 opencv-python==4.13.0.92
 Pillow>=9.0.0
