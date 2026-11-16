@@ -150,7 +150,7 @@ def places_figures(cfg, out):
             frameon=False,
         )
     fig.tight_layout()
-    save_jpg(fig, out / "lieux.jpg", cfg)
+    save_jpg(fig, out / "lieux.jpg", cfg, cfg["figures"]["web_dpi"])
     plt.close(fig)
 
 
@@ -273,7 +273,7 @@ def cover_rules_figure(cfg, out):
     ax.xaxis.set_major_formatter(lambda v, _: f"{v:.0%}")
     ax.legend(fontsize=8, frameon=False, loc="lower right")
     ax.set_title(
-        "Polygones EVA conformes à leur règle de couverture selon Végéstrate",
+        "Polygones EVA où Végéstrate retrouve la couverture attendue par leur classe",
         fontsize=10,
     )
     fig.tight_layout()
