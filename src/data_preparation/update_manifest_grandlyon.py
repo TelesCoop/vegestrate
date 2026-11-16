@@ -9,7 +9,7 @@ def main():
 
     all_tiles = []
     with open(csv_path, encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f, delimiter=";")
+        reader = csv.DictReader(f, delimiter=",")
         for row in reader:
             tile_id = row["nom"]
             url = row["url"].strip()
